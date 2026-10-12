@@ -4433,7 +4433,7 @@
                                 <div>
                                     <span class="section-eyebrow">OPTIONAL CHECKS</span>
                                     <div class="guide-section-title">进阶功能保持可选</div>
-                                    <p class="guide-note">课表导入、照片时间阻止与批量失败重试都不影响最短主流程：只有主动启用时，它们才参与提交判断。右侧「我的锻炼记录」面板只读展示服务端记录，与提交判定无关。</p>
+                                    <p class="guide-note">课表导入、照片时间阻止与批量失败重试都不影响最短主流程：只有主动启用时，它们才参与提交判断。批量页与「单次提交」共用同一个 Token，并把整段日期的轨迹、时间、里程、配速和照片一次性生成后逐天列出来，照片按明暗度匹配当天时段，核对无误再提交。右侧「我的锻炼记录」面板只读展示服务端记录，与提交判定无关。</p>
                                 </div>
                                 <button type="button" class="btn btn-outline-primary" data-open-mode="run">返回填写区 <span aria-hidden="true">→</span></button>
                             </section>
@@ -4444,12 +4444,12 @@
                     <div id="mode-content-batch" class="mode-content d-none" role="tabpanel" aria-labelledby="tab-batch" aria-hidden="true">
                         <div id="batch-area">
                             <div class="mb-3">
-                                <label for="input-token-batch" class="form-label">Blade-Auth Token 输入</label>
+                                <label for="input-token-batch" class="form-label">Blade-Auth Token（与「单次提交」共用一个）</label>
                                 <div class="token-input-wrap">
-                                    <input type="password" id="input-token-batch" class="form-control" placeholder="请输入 bearer Token" autocomplete="off" spellcheck="false">
+                                    <input type="password" id="input-token-batch" class="form-control" placeholder="与「单次提交」同一个 Token，填一次即可" autocomplete="off" spellcheck="false">
                                     <button type="button" class="token-toggle" data-token-target="input-token-batch" aria-pressed="false">显示</button>
                                 </div>
-                                <small class="security-note">批量提交会连续调用接口，请确认日期、照片和账号均属于本人。</small>
+                                <small class="security-note">本页不再单独要一份 Token：在「单次提交」或这里任意一处填入（或用桥接提取），另一边会自动同步；批量提交会连续调用接口，请确认日期、照片和账号均属于本人。</small>
                                 <span id="token-validation-message-batch" class="text-danger" style="display: none;">❌ Token 不符合规范</span>
                             </div>
                             <div class="visual-banner batch-visual-banner" aria-hidden="true">
@@ -4495,12 +4495,10 @@
                                     <input class="form-check-input" type="checkbox" id="batch-random-time" checked>
                                     <label class="form-check-label" for="batch-random-time">自动生成随机时间（按服务端规则推导，与轨迹里程、配速自洽）</label>
                                 </div>
-                                <div class="mt-2">
-                                    <button type="button" id="btn-random-time-batch" class="btn btn-outline-secondary btn-sm">🎲 随机时间</button>
-                                </div>
+                                <small class="text-muted">取消勾选后每天固定从 07:00 开始，时长仍取自当天的轨迹。</small>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">照片池（多张照片将随机抽取，每天不同）</label>
+                                <label class="form-label">照片池（多张照片按明暗度匹配当天时段抽取，每天不同）</label>
                                 <div class="row">
                                     <div class="col-md-6">
                                         <label for="batch-image_start-pool" class="form-label">开始照片（支持多张）</label>
@@ -4512,6 +4510,16 @@
                                         <input type="file" id="batch-image_end-pool" class="form-control" accept="image/*" multiple>
                                         <small class="text-muted" id="batch-end-pool-count">已选 0 张</small>
                                     </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="form-label mb-0">轨迹预演（一次性生成全部轨迹）</label>
+                                    <button type="button" id="btn-generate-batch-plans" class="btn btn-outline-primary btn-sm">🎲 一次性生成全部轨迹</button>
+                                </div>
+                                <div id="batch-plan-summary" class="text-muted small">还没有生成。可以先点上面的按钮生成并核对，也可以直接「开始批量提交」，提交前会自动先生成。</div>
+                                <div id="batch-plan-area" class="consistency-panel mt-2" style="display: none;">
+                                    <ul id="batch-plan-list" class="consistency-list"></ul>
                                 </div>
                             </div>
                             <div class="mb-3" id="batch-progress-area" style="display: none;">
@@ -7397,6 +7405,10 @@ function ml_distanceToPolygon(lat, lng, polygon) {
 
         ml_boundary_cache = {};
 
+        // 最近一次为哪个场地生成过轨迹。提交前会重新拉 listRule 刷新场地表，
+        // 刷新时必须把这份生成结果保住（见 ml_load_route_data_from_server）。
+        ml_generated_track = null;
+
         ml_boundary_name_map = {
             "403640128840458727": "小营田径场",
             "403640128840458521": "四牌楼体育场",
@@ -7771,13 +7783,20 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             if (wrap) { wrap.style.display = "none"; }
         }
 
-        async function ml_generate_time_and_track(ml_date_str) {
-            var route = ml_choose_route_data || {};
+        /*
+        ML Remark: 轨迹预演（纯计算）
+        给定「一天 + 一个场地规则」，算出一份完整的提交方案：
+            场地、轨迹点、里程、时长、配速、起止时间
+        它不读写任何 DOM / 全局状态，所以批量模式可以一次性算很多份（每天一份）而互不干扰。
+        单次模式由 ml_generate_time_and_track 调用它，再把结果填回表单并画预览。
+        */
+        async function ml_build_plan_for_date(ml_date_str, ml_route, ml_options) {
+            ml_options = ml_options || {};
+            var route = ml_route || {};
             var planId = route.plan_id;
             if (!planId) {
                 throw new Error("请先填入 Token 加载场地，再生成时间与轨迹");
             }
-            if (typeof ml_apply_date_max_limits === "function") { ml_apply_date_max_limits(); }
             var minTimeMin = Number(route.min_time) || 4;
             var maxTimeMin = Number(route.max_time) || 12;
             var minPaceMinPerKm = Number(route.min_pace) || 3.3333;
@@ -7813,24 +7832,16 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             durationSeconds = Math.max(minTimeMin * 60, Math.min(maxTimeMin * 60, durationSeconds));
             durationSeconds = Math.max(durationSeconds, 60);
 
-            // 5) 时间落在所选日期 + 规则的起止时间内
-            var datePicker = document.getElementById('exercise-date-picker');
-            var startInput = document.getElementById('exercise-start_time');
-            var dateStr = ml_date_str
-                ? ml_date_str
-                : (datePicker && datePicker.value
-                    ? datePicker.value
-                    : (startInput && startInput.value ? startInput.value.slice(0, 10) : ml_format_exercise_date(new Date())));
-            var generatedTime = ml_generateValidTimeForDate(dateStr, durationSeconds);
-            if (!generatedTime || !generatedTime.start || !generatedTime.end) {
-                throw new Error("今天已经没有可用的时段了（不能提前跑）。请把开始时间改到今天更早的时间，或者选择过去的日期。");
+            // 5) 时间落在该日期 + 规则的起止时间内
+            var generatedTime = null;
+            if (ml_options.fixedStartHour !== null && ml_options.fixedStartHour !== undefined) {
+                generatedTime = ml_buildFixedStartTime(ml_date_str, ml_options.fixedStartHour, durationSeconds);
+            } else {
+                generatedTime = ml_generateValidTimeForDate(ml_date_str, durationSeconds, route, ml_options.now);
             }
-
-            document.getElementById("exercise-start_time").value = generatedTime.start;
-            document.getElementById("exercise-end_time").value = generatedTime.end;
-            if (typeof ml_sync_exercise_date_picker === "function") { ml_sync_exercise_date_picker(); }
-            ml_exercise_start_time = generatedTime.start;
-            ml_exercise_end_time = generatedTime.end;
+            if (!generatedTime || !generatedTime.start || !generatedTime.end) {
+                throw new Error("该日期已经没有可用的时段了（不能提前跑）。请选择更早的日期或更早的时间。");
+            }
 
             // 6) 让轨迹 metadata 与最终提交的时长、配速一致
             result.metadata.totalTime = durationSeconds;
@@ -7838,17 +7849,114 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             result.metadata.paceSecondsPerKm = Math.round(paceMinPerKm * 60);
             result.metadata.formattedPace = Math.floor(paceMinPerKm) + "'" +
                 Math.round((paceMinPerKm - Math.floor(paceMinPerKm)) * 60).toString().padStart(2, '0') + "''";
-            ml_student_choose_route_data = result;
-            if (typeof ml_check_valid_time_sync === "function") { ml_check_valid_time_sync(); }
-            ml_renderTrackPreview(result.track, result.metadata);
 
-            console.log("时间+轨迹已生成: " + actualDistanceKm.toFixed(2) + "km / " +
-                durationSeconds + "s / " + paceMinPerKm.toFixed(2) + "min每km");
             return {
+                date: ml_date_str,
+                planId: planId,
+                routeName: route.route_name || planId,
+                route: route,
                 track: result.track,
                 metadata: result.metadata,
+                start: generatedTime.start,
+                end: generatedTime.end,
                 durationSeconds: durationSeconds,
                 paceMinPerKm: paceMinPerKm
+            };
+        }
+
+        // 固定起始时间（批量页取消「随机时间」时用）：07:00 开始，时长仍取自当天轨迹
+        function ml_buildFixedStartTime(ml_date_str, ml_start_hour, ml_duration_seconds) {
+            var parts = ml_date_str.split('-');
+            var startDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10),
+                Number(ml_start_hour) || 0, 0, 0);
+            var pad = function (n) { return String(n).padStart(2, '0'); };
+            var endDate = new Date(startDate.getTime() + ml_duration_seconds * 1000);
+            return {
+                start: ml_date_str + 'T' + pad(startDate.getHours()) + ':' + pad(startDate.getMinutes()) + ':' + pad(startDate.getSeconds()),
+                end: ml_date_str + 'T' + pad(endDate.getHours()) + ':' + pad(endDate.getMinutes()) + ':' + pad(endDate.getSeconds())
+            };
+        }
+
+        /*
+        ML Remark: 方案自检
+        和 ml_check_valid_time_sync 同一套规则，但只针对传入的方案，不读 DOM、不弹窗，
+        所以批量模式可以在提交前逐天判断（哪一天不合规就跳过那一天，而不是整批中断）。
+        */
+        function ml_check_plan_time(ml_plan, ml_now) {
+            if (!ml_plan || !ml_plan.start || !ml_plan.end) { return "时间未生成"; }
+            var route = ml_plan.route || ml_choose_route_data || {};
+            var startTime = new Date(ml_plan.start);
+            var endTime = new Date(ml_plan.end);
+            if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) { return "时间格式无效"; }
+            var nowForCheck = ml_now instanceof Date ? ml_now : new Date();
+            if (startTime > nowForCheck) { return "不能提前跑（" + ml_plan.start.slice(0, 16).replace("T", " ") + " 还没到）"; }
+            if (startTime.getFullYear() !== endTime.getFullYear() ||
+                startTime.getMonth() !== endTime.getMonth() ||
+                startTime.getDate() !== endTime.getDate()) {
+                return "开始和结束时间不在同一天";
+            }
+            if (startTime >= endTime) { return "结束时间必须晚于开始时间"; }
+            if (route.rule_start_time && route.rule_end_time) {
+                var ruleStartParts = String(route.rule_start_time).split(":");
+                var ruleEndParts = String(route.rule_end_time).split(":");
+                var ruleStart = new Date(startTime);
+                ruleStart.setHours(parseInt(ruleStartParts[0], 10), parseInt(ruleStartParts[1], 10), 0, 0);
+                var ruleEnd = new Date(startTime);
+                ruleEnd.setHours(parseInt(ruleEndParts[0], 10), parseInt(ruleEndParts[1], 10), 0, 0);
+                var windowText = String(route.rule_start_time).slice(0, 5) + "-" + String(route.rule_end_time).slice(0, 5);
+                if (startTime < ruleStart || endTime > ruleEnd) {
+                    return "所选时间超出可锻炼时段（" + windowText + "）";
+                }
+            }
+            var durationMinutes = (endTime - startTime) / 60000;
+            if (route.min_time !== undefined && durationMinutes < Number(route.min_time)) {
+                return "运动时长短于规则下限 " + route.min_time + " 分钟";
+            }
+            if (route.max_time !== undefined && durationMinutes > Number(route.max_time)) {
+                return "运动时长超过规则上限 " + route.max_time + " 分钟";
+            }
+            return null;
+        }
+
+        async function ml_generate_time_and_track(ml_date_str) {
+            var route = ml_choose_route_data || {};
+            if (!route.plan_id) {
+                throw new Error("请先填入 Token 加载场地，再生成时间与轨迹");
+            }
+            if (typeof ml_apply_date_max_limits === "function") { ml_apply_date_max_limits(); }
+            var datePicker = document.getElementById('exercise-date-picker');
+            var startInput = document.getElementById('exercise-start_time');
+            var dateStr = ml_date_str
+                ? ml_date_str
+                : (datePicker && datePicker.value
+                    ? datePicker.value
+                    : (startInput && startInput.value ? startInput.value.slice(0, 10) : ml_format_exercise_date(new Date())));
+
+            var plan = await ml_build_plan_for_date(dateStr, route, {});
+
+            document.getElementById("exercise-start_time").value = plan.start;
+            document.getElementById("exercise-end_time").value = plan.end;
+            if (typeof ml_sync_exercise_date_picker === "function") { ml_sync_exercise_date_picker(); }
+            ml_exercise_start_time = plan.start;
+            ml_exercise_end_time = plan.end;
+
+            ml_student_choose_route_data = { track: plan.track, metadata: plan.metadata };
+            // 记住"这份轨迹是为哪个场地生成的"：提交前会重新拉一次 listRule，
+            // 刷新时不能再把已经生成好的轨迹换成服务端的原始多边形角点。
+            ml_generated_track = { planId: plan.planId, data: ml_student_choose_route_data, token: ml_student_token };
+            if (typeof ml_check_valid_time_sync === "function") { ml_check_valid_time_sync(); }
+            ml_renderTrackPreview(plan.track, plan.metadata);
+
+            console.log("时间+轨迹已生成: " + (plan.metadata.totalDistance / 1000).toFixed(2) + "km / " +
+                plan.durationSeconds + "s / " + plan.paceMinPerKm.toFixed(2) + "min每km");
+            return {
+                track: plan.track,
+                metadata: plan.metadata,
+                durationSeconds: plan.durationSeconds,
+                paceMinPerKm: plan.paceMinPerKm,
+                date: plan.date,
+                start: plan.start,
+                end: plan.end
             };
         }
 
@@ -8430,18 +8538,23 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             if (typeof ml_updateHeroFlowState === 'function') ml_updateHeroFlowState();
         }
 
-        function ml_generateValidTimeForDate(dateStr, durationSeconds) {
+        // 生成某天规则时段内的随机起止时间。
+        // ml_route_override / ml_now_override 可选：批量预生成时逐天传入场地与统一的"现在"，
+        // 避免依赖全局选中的场地和本机时钟。
+        function ml_generateValidTimeForDate(dateStr, durationSeconds, ml_route_override, ml_now_override) {
             durationSeconds = durationSeconds || 480;
+            var route = ml_route_override || ml_choose_route_data;
+            if (!route || !route.rule_start_time || !route.rule_end_time) { return null; }
             var parts = dateStr.split('-');
             var year = parseInt(parts[0], 10);
             var month = parseInt(parts[1], 10) - 1;
             var day = parseInt(parts[2], 10);
-            var ruleStartParts = ml_choose_route_data.rule_start_time.split(':');
-            var ruleEndParts = ml_choose_route_data.rule_end_time.split(':');
+            var ruleStartParts = route.rule_start_time.split(':');
+            var ruleEndParts = route.rule_end_time.split(':');
             var earliestStart = new Date(year, month, day, parseInt(ruleStartParts[0], 10), parseInt(ruleStartParts[1], 10), 0);
             var latestEnd = new Date(year, month, day, parseInt(ruleEndParts[0], 10), parseInt(ruleEndParts[1], 10), 0);
             // 禁止提前跑：结束时间不能晚于当前时间，否则生成的是一条未来的记录
-            var nowForGen = new Date();
+            var nowForGen = ml_now_override instanceof Date ? ml_now_override : new Date();
             if (latestEnd > nowForGen) { latestEnd = nowForGen; }
             if (latestEnd <= earliestStart) {
                 // 今天已经没有任何可用的过去时段（比如早上 6 点前还没到锻炼时间）
@@ -8630,7 +8743,7 @@ function ml_distanceToPolygon(lat, lng, polygon) {
         拿失效的 rule_id 调 saveStartRecord，服务端查不到规则会直接抛
         "500 服务器异常"。所以每次校验 Token / 提交前都用 listRule 重建这两张表。
         */
-        function ml_build_route_tables_from_rules(ml_rule_json) {
+        function ml_build_route_tables_from_rules(ml_rule_json, ml_preferred_plan_id, ml_keep_route_data) {
             var ml_rules = (ml_rule_json && ml_rule_json.data) || [];
             var ml_routes = {};
             var ml_tracks = {};
@@ -8690,14 +8803,16 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             if (ml_count === 0) { return 0; }
             ml_all_route_info = ml_routes;
             ml_student_route_all_info = ml_tracks;
-            ml_sync_route_selects();
+            ml_sync_route_selects(ml_preferred_plan_id, ml_keep_route_data);
             return ml_count;
         }
 
-        // 重建两个场地下拉框，并让当前选中项落在服务端返回的场地上
-        function ml_sync_route_selects() {
+        // 重建两个场地下拉框，并让当前选中项落在服务端返回的场地上。
+        // ml_preferred_plan_id / ml_keep_route_data：刷新前已生成好的轨迹所属场地与轨迹本身，
+        // 只要这个场地在新表里还在，就沿用（否则刷新会把生成结果换成服务端的粗角点多边形）。
+        function ml_sync_route_selects(ml_preferred_plan_id, ml_keep_route_data) {
             var ml_plan_ids = Object.keys(ml_all_route_info);
-            var ml_previous_plan_id = ml_choose_route_data && ml_choose_route_data.plan_id;
+            var ml_previous_plan_id = ml_preferred_plan_id || (ml_choose_route_data && ml_choose_route_data.plan_id);
             ["select-route_info", "select-route_info-batch"].forEach(function(ml_select_id) {
                 var ml_select = document.getElementById(ml_select_id);
                 if (!ml_select) { return; }
@@ -8724,21 +8839,44 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                 }
             }
             ml_choose_route_data = ml_all_route_info[ml_chosen_plan_id];
-            ml_student_choose_route_data = ml_student_route_all_info[ml_chosen_plan_id];
+            ml_student_choose_route_data = (ml_keep_route_data && ml_keep_route_data.track &&
+                ml_keep_route_data.metadata && ml_keep_route_data.generatedForPlanId === ml_chosen_plan_id)
+                ? ml_keep_route_data
+                : ml_student_route_all_info[ml_chosen_plan_id];
             var ml_main_select = document.getElementById("select-route_info");
             if (ml_main_select) { ml_main_select.value = ml_chosen_plan_id; }
         }
 
-        async function ml_load_route_data_from_server(ml_token) {
+        async function ml_load_route_data_from_server(ml_token, ml_options) {
+            ml_options = ml_options || {};
+            var ml_effective_token = ml_token || ml_student_token;
+            // 默认保住"当前已生成的轨迹"：只要它对应的场地还在新表里。
+            var ml_preferred_plan_id = ml_options.planId || null;
+            var ml_keep_route_data = null;
+            // 换了 Token 就不再复用旧 Token 下生成的轨迹：场地/账号都可能对不上。
+            if (ml_generated_track && (ml_generated_track.token || "") !== (ml_effective_token || "")) {
+                ml_generated_track = null;
+            }
+            if (ml_options.keepRouteData !== undefined) {
+                ml_keep_route_data = ml_options.keepRouteData;
+            } else if (ml_generated_track && ml_generated_track.planId) {
+                ml_preferred_plan_id = ml_preferred_plan_id || ml_generated_track.planId;
+                ml_keep_route_data = ml_generated_track.data;
+                ml_keep_route_data.generatedForPlanId = ml_generated_track.planId;
+            }
             try {
                 var ml_response = await fetch(ml_api_base_url + "/api/blade-exercise/v2/exerciseRecord/listRule", {
                     method: "GET",
-                    headers: ml_api_headers(ml_token || ml_student_token, { "Content-Type": "application/json" })
+                    headers: ml_api_headers(ml_effective_token, { "Content-Type": "application/json" })
                 });
                 var ml_json = await ml_parse_response(ml_response, "读取锻炼规则");
-                var ml_count = ml_build_route_tables_from_rules(ml_json);
+                var ml_count = ml_build_route_tables_from_rules(ml_json, ml_preferred_plan_id, ml_keep_route_data);
                 if (ml_count === 0) {
                     throw new Error("服务端未返回任何可用场地");
+                }
+                if (ml_generated_track && (!ml_generated_track.planId || ml_generated_track.planId !== ml_preferred_plan_id)) {
+                    // 生成轨迹用的场地已经不在服务端列表里了，这份结果作废
+                    ml_generated_track = null;
                 }
                 console.log("已用服务端规则覆盖内置场地表，共 " + ml_count + " 个场地");
                 return true;
@@ -8778,8 +8916,22 @@ function ml_distanceToPolygon(lat, lng, polygon) {
         }
 
         // 返回该日期上已有的记录；没有则返回 null。查询失败时抛错，由调用方决定是否放行。
-        async function ml_find_existing_record(ml_date_str) {
-            var ml_records = await ml_fetch_records_for_month(String(ml_date_str).slice(0, 7));
+        // 批量模式一次要查几十天，同一个月反复查同一份数据没有意义，按月份缓存；
+        // 某天提交成功后再把这个月的缓存作废（见 ml_submit_batch_plan）。
+        var ml_record_month_cache = {};
+
+        async function ml_fetch_records_for_month_cached(ml_month_str) {
+            if (!ml_record_month_cache[ml_month_str]) {
+                ml_record_month_cache[ml_month_str] = await ml_fetch_records_for_month(ml_month_str);
+            }
+            return ml_record_month_cache[ml_month_str];
+        }
+
+        async function ml_find_existing_record(ml_date_str, ml_options) {
+            ml_options = ml_options || {};
+            var ml_records = ml_options.fresh
+                ? await ml_fetch_records_for_month(String(ml_date_str).slice(0, 7))
+                : await ml_fetch_records_for_month_cached(String(ml_date_str).slice(0, 7));
             for (var ml_i = 0; ml_i < ml_records.length; ml_i++) {
                 if (ml_records[ml_i].recordTime === ml_date_str) { return ml_records[ml_i]; }
             }
@@ -9805,22 +9957,67 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             return prefix + ts + "_" + rand + ".jpg";
         }
 
+        /*
+        ML Remark: 提交上下文
+        单次提交时表单本身就是唯一的一份数据；批量提交时每天都有各自的场地/轨迹/时间/照片，
+        而表单只有一套。所以批量在提交某一天时把当天那份数据放进 ml_active_submission，
+        下面的上传函数优先读它，读不到再回落到表单。
+        这样即使中途因为刷新场地表等操作改了全局状态，提交的仍然是当天预演好的那一份。
+        */
+        var ml_active_submission = null;
+
+        function ml_submission_value(ml_key, ml_fallback) {
+            if (ml_active_submission && ml_active_submission[ml_key] !== undefined && ml_active_submission[ml_key] !== null) {
+                return ml_active_submission[ml_key];
+            }
+            return ml_fallback;
+        }
+
+        function ml_submission_route() {
+            return ml_submission_value("route", ml_choose_route_data);
+        }
+
+        function ml_submission_track_data() {
+            return ml_submission_value("track_data", ml_student_choose_route_data);
+        }
+
+        function ml_submission_start_time() {
+            var fallback = ml_exercise_start_time ||
+                ((document.getElementById("exercise-start_time") || {}).value || "");
+            return ml_submission_value("start", fallback);
+        }
+
+        function ml_submission_end_time() {
+            var fallback = ml_exercise_end_time ||
+                ((document.getElementById("exercise-end_time") || {}).value || "");
+            return ml_submission_value("end", fallback);
+        }
+
+        // 批量模式的照片来自照片池（不是表单里的单张），由上下文带着走
+        function ml_submission_photo_file(ml_api_type) {
+            if (ml_active_submission) {
+                var pooled = ml_api_type == 1 ? ml_active_submission.startFile : ml_active_submission.endFile;
+                if (pooled) { return pooled; }
+            }
+            var fileInput = document.getElementById(ml_api_type == 1 ? "input-image_start" : "input-image_end");
+            if (fileInput && fileInput.files && fileInput.files.length > 0) { return fileInput.files[0]; }
+            return null;
+        }
+
         // 上传图片(开始1、结束2通用)
         async function ml_upload_image(ml_api_type) {
             // 自保护：检查文件是否存在
-            var inputId = (ml_api_type == 1) ? "input-image_start" : "input-image_end";
-            var fileInput = document.getElementById(inputId);
-            if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+            var srcFile = ml_submission_photo_file(ml_api_type);
+            if (!srcFile) {
                 throw new Error("上传图片失败：未选择" + (ml_api_type == 1 ? "开始" : "结束") + "照片");
             }
-            var srcFile = fileInput.files[0];
-            if (!srcFile || srcFile.size === 0) {
+            if (srcFile.size === 0) {
                 throw new Error("上传图片失败：照片文件为空");
             }
             const ml_image_data = new FormData();
             let ml_api_name = "";
             // 文件名时间戳与运动日期一致（批量模式下）
-            var photoName = ml_randomPhotoFilename(ml_exercise_start_time);
+            var photoName = ml_randomPhotoFilename(ml_submission_start_time());
 
             // ml_api_type = 1: start; 2: end
             // 小程序使用的接口名是 uploadRecordImageStart / uploadRecordImageEnd，
@@ -9863,27 +10060,29 @@ function ml_distanceToPolygon(lat, lng, polygon) {
         async function ml_upload_start_record() {
             // 需要先上传开始图片
             ml_start_image_url = await ml_upload_image(1);
+            var startRoute = ml_submission_route() || {};
+            var startTimeValue = ml_submission_start_time();
 
             // 与小程序 exerciseObj 字段对齐：补齐 id / nowStatus / userId，
             // 并且小程序在调用 saveStartRecord 前会 delete strLatitudeLongitude，这里同样不发。
             ml_start_record_data = {
                 "id": "",
-                "routeName": ml_choose_route_data.route_name,
-                "ruleId": ml_choose_route_data.rule_id,
-                "planId": ml_choose_route_data.plan_id,
-                "recordTime": ml_exercise_start_time.split("T")[0],
-                "startTime": ml_exercise_start_time.split("T")[1].replace(".000", ""),
+                "routeName": startRoute.route_name,
+                "ruleId": startRoute.rule_id,
+                "planId": startRoute.plan_id,
+                "recordTime": startTimeValue.split("T")[0],
+                "startTime": startTimeValue.split("T")[1].replace(".000", ""),
                 "startImage": ml_start_image_url,
                 "endTime": "",
                 "exerciseTimes": "",
                 "routeKilometre": "",
                 "endImage": "",
-                "routeRule": ml_choose_route_data.route_rule,
-                "maxTime": ml_choose_route_data.max_time,
-                "minTime": ml_choose_route_data.min_time,
-                "orouteKilometre": ml_choose_route_data.route_distance_km,
-                "ruleEndTime": ml_choose_route_data.rule_end_time,
-                "ruleStartTime": ml_choose_route_data.rule_start_time,
+                "routeRule": startRoute.route_rule,
+                "maxTime": startRoute.max_time,
+                "minTime": startRoute.min_time,
+                "orouteKilometre": startRoute.route_distance_km,
+                "ruleEndTime": startRoute.rule_end_time,
+                "ruleStartTime": startRoute.rule_start_time,
                 "calorie": 0,
                 "speed": "0'00''",
                 "dispTimeText": 0,
@@ -9917,36 +10116,40 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             // 需要先上传结束照片
             ml_end_image_url = await ml_upload_image(2);
 
-            ml_exercising_start_time = new Date(document.getElementById("exercise-start_time").value);
-            ml_exercising_end_time = new Date(document.getElementById("exercise-end_time").value);
+            var finishRoute = ml_submission_route() || {};
+            var finishTrackData = ml_submission_track_data() || { metadata: {}, track: [] };
+            var finishStartTime = ml_submission_start_time();
+            var finishEndTime = ml_submission_end_time();
+            ml_exercising_start_time = new Date(finishStartTime);
+            ml_exercising_end_time = new Date(finishEndTime);
             ml_exercising_time = (ml_exercising_end_time - ml_exercising_start_time) / 1000; // exercise seconds
             ml_exercise_dispTimeText = `${Math.floor(ml_exercising_time / 60)} 分 ${ml_exercising_time - 60 * Math.floor(ml_exercising_time / 60)} 秒`;
-            ml_exercising_route_kilometres = Math.round(ml_student_choose_route_data.metadata.totalDistance / 10) / 100;
-            ml_exercising_calories = Math.round(ml_student_choose_route_data.metadata.totalDistance * 62 / 1000);
+            ml_exercising_route_kilometres = Math.round(finishTrackData.metadata.totalDistance / 10) / 100;
+            ml_exercising_calories = Math.round(finishTrackData.metadata.totalDistance * 62 / 1000);
             ml_one_km_time = Math.round(ml_exercising_time / ml_exercising_route_kilometres);
             var paceMin = Math.floor(ml_one_km_time / 60);
             var paceSec = ml_one_km_time - 60 * paceMin;
             ml_one_km_speed_str = paceMin + "'" + paceSec.toString().padStart(2,'0') + "''";
             ml_finish_record_data = {
-                "routeName": ml_choose_route_data.route_name,
-                "ruleId": ml_choose_route_data.rule_id,
-                "planId": ml_choose_route_data.plan_id,
-                "recordTime": ml_exercise_start_time.split("T")[0],
-                "startTime": ml_exercise_start_time.split("T")[1],
+                "routeName": finishRoute.route_name,
+                "ruleId": finishRoute.rule_id,
+                "planId": finishRoute.plan_id,
+                "recordTime": finishStartTime.split("T")[0],
+                "startTime": finishStartTime.split("T")[1],
                 "startImage": ml_start_image_url,
-                "routeRule": ml_choose_route_data.route_rule,
-                "maxTime": ml_choose_route_data.max_time,
-                "minTime": ml_choose_route_data.min_time,
-                "orouteKilometre": ml_choose_route_data.route_distance_km,
-                "ruleEndTime": ml_choose_route_data.rule_end_time,
-                "ruleStartTime": ml_choose_route_data.rule_start_time,
+                "routeRule": finishRoute.route_rule,
+                "maxTime": finishRoute.max_time,
+                "minTime": finishRoute.min_time,
+                "orouteKilometre": finishRoute.route_distance_km,
+                "ruleEndTime": finishRoute.rule_end_time,
+                "ruleStartTime": finishRoute.rule_start_time,
                 "studentId": ml_student_user_id,
                 "userId": ml_student_user_id,
-                "endTime": ml_exercise_end_time.split("T")[1].replace(".000", ""),
+                "endTime": finishEndTime.split("T")[1].replace(".000", ""),
                 "exerciseTimes": ml_exercising_time,
                 "routeKilometre": ml_exercising_route_kilometres,
                 "endImage": ml_end_image_url,
-                "strLatitudeLongitude": JSON.stringify(ml_student_choose_route_data.track),
+                "strLatitudeLongitude": JSON.stringify(finishTrackData.track),
                 "calorie": ml_exercising_calories,
                 "speed": ml_one_km_speed_str,
                 "dispTimeText": ml_exercise_dispTimeText,
@@ -9971,15 +10174,15 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                 ml_show_Alert("锻炼时间错误", "❌ 所选锻炼时间段非法！");
                 return false;
             }
-            // 检查是否上传了开始和结束时的图片
-            image_uploader_start_one_click = document.getElementById("input-image_start");
-            image_uploader_end_one_click = document.getElementById("input-image_end");
-            if(image_uploader_start_one_click.files.length == 0){
+            // 检查是否上传了开始和结束时的图片（批量模式下照片来自照片池，由上下文提供）
+            image_uploader_start_one_click = ml_submission_photo_file(1);
+            image_uploader_end_one_click = ml_submission_photo_file(2);
+            if(!image_uploader_start_one_click){
                 console.error("❌ Please upload the start image.");
                 ml_show_Alert("上传图片出错", "❌ 请上传开始图片！");
                 return false;
             }
-            if(image_uploader_end_one_click.files.length == 0){
+            if(!image_uploader_end_one_click){
                 console.error("❌ Please upload the end image.");
                 ml_show_Alert("上传图片出错", "❌ 请上传结束图片！");
                 return false;
@@ -10003,7 +10206,7 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             }
             // 同一天已有记录就直接拦下（批量模式在循环里单独检查，避免逐条弹窗）
             if (!ml_batch_mode) {
-                var targetDateForDuplicateCheck = (ml_exercise_start_time || "").slice(0, 10);
+                var targetDateForDuplicateCheck = (ml_submission_start_time() || "").slice(0, 10);
                 if (targetDateForDuplicateCheck) {
                     try {
                         var existingRecordForDate = await ml_find_existing_record(targetDateForDuplicateCheck);
@@ -10111,10 +10314,655 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             }
             else{
                 console.log("✅ 运动记录成功上传");
+                // 刚写入的记录会让"当月记录"缓存过期，作废它，避免下次查重看到旧数据
+                var ml_submitted_month = (ml_submission_start_time() || "").slice(0, 7);
+                if (ml_submitted_month) { delete ml_record_month_cache[ml_submitted_month]; }
                 ml_set_run_submit_status('运动记录提交成功。', 'success');
                 ml_show_Alert("记录上传成功", "✅ 运动记录成功上传! ");
             }
             return true;
+        }
+
+        // ===================== 批量多日提交 =====================
+        /*
+        ML Remark: 批量的接口契约与单次完全一致
+        单次提交要做的三件事，批量每天都要各做一遍：
+            1. listRule 拿服务端当前的 rule_id / plan_id（内置场地表早已失效）
+            2. uploadRecordImageStart / End 传照片，saveStartRecord / saveRecord 写加密记录
+            3. 同一天已有有效记录就跳过
+        区别只在"每天的数据从哪来"：单次读表单，批量读一次性预算好的一批方案。
+        所以批量不再逐天改全局状态后再提交（那样提交前刷新一次 listRule 就会把当天
+        生成的轨迹冲掉，随机场地也会被悄悄换回下拉框里的场地），而是：
+            一次性生成 N 份方案 → 每天把当天那份放进 ml_active_submission → 上传 → 清空
+        */
+        var ml_batch_state = {
+            isRunning: false,
+            currentDay: 0,
+            totalDays: 0,
+            results: [],
+            abortRequested: false,
+            plans: [],            // 预演好的方案（每天一份）
+            planErrors: [],       // 预演阶段就失败的日期
+            planSignature: '',    // 方案对应的设置签名，设置没变就不重复生成
+            pools: null
+        };
+
+        // 两个 Token 输入框共用一个 Token：批量页不再要求重复填一遍
+        function ml_resolve_token() {
+            var batchInput = document.getElementById('input-token-batch');
+            var mainInput = document.getElementById('input-token');
+            var batchValue = batchInput ? String(batchInput.value || '').trim() : '';
+            var mainValue = mainInput ? String(mainInput.value || '').trim() : '';
+            return batchValue || mainValue || String(ml_student_token || '').trim();
+        }
+
+        function ml_mirror_token(ml_source_id) {
+            var ml_target_id = ml_source_id === 'input-token' ? 'input-token-batch' : 'input-token';
+            var ml_source = document.getElementById(ml_source_id);
+            var ml_target = document.getElementById(ml_target_id);
+            if (!ml_source || !ml_target) { return; }
+            if (ml_target.value === ml_source.value) { return; }
+            ml_target.value = ml_source.value;
+            ml_target.dispatchEvent(new Event('input', { bubbles: true }));
+            ml_target.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function ml_batch_photo_signature(files) {
+            return Array.from(files || []).map(function(file) {
+                return file.name + ':' + file.size + ':' + file.lastModified;
+            }).join('|');
+        }
+
+        // 照片池明暗度只分析一次，多天复用（300 张 × 30 天不可能每张每天都重算）
+        var ml_photo_pool_cache = {};
+
+        function ml_photo_pool_key(file) {
+            return file.name + ':' + file.size + ':' + file.lastModified;
+        }
+
+        async function ml_analyze_photo_pool(files) {
+            var pool = [];
+            for (var i = 0; i < files.length; i++) {
+                var file = files[i];
+                var key = ml_photo_pool_key(file);
+                var entry = ml_photo_pool_cache[key];
+                if (!entry) {
+                    var brightness = await ml_analyzeImageBrightness(file);
+                    entry = {
+                        key: key,
+                        file: file,
+                        fileName: file.name,
+                        brightness: brightness,
+                        // day / night / null（图片读不出来，不参与明暗度匹配）
+                        period: brightness ? brightness.period : null
+                    };
+                    ml_photo_pool_cache[key] = entry;
+                }
+                pool.push(entry);
+            }
+            return pool;
+        }
+
+        function ml_photo_pool_breakdown(pool) {
+            var day = 0, night = 0, unknown = 0;
+            pool.forEach(function(entry) {
+                if (entry.period === 'day') { day++; }
+                else if (entry.period === 'night') { night++; }
+                else { unknown++; }
+            });
+            var text = '白天 ' + day + ' / 夜间 ' + night;
+            if (unknown > 0) { text += ' / 读不出 ' + unknown; }
+            return text;
+        }
+
+        function ml_photo_pool_summary(pool) {
+            if (!pool || pool.length === 0) { return '0 张'; }
+            return pool.length + ' 张（' + ml_photo_pool_breakdown(pool) + '）';
+        }
+
+        /*
+        ML Remark: 照片池按明暗度匹配时段
+        清晨/傍晚和夜里的记录配白天的亮照片，或者反过来，是最容易被一眼看出来的不一致。
+        所以抽取时先按轨迹时段（day / night）筛，再在筛出来的里面挑"用得最少"的那张，
+        让池子里的照片尽量轮着用而不是反复抽到同一张。池里没有对应时段的照片时退回全池，
+        并把这件事写进当天的提示里。
+        */
+        function ml_pick_pool_photo(pool, period, usage) {
+            var matched = pool.filter(function(entry) { return entry.period && entry.period === period; });
+            var candidates = matched.length > 0 ? matched : pool;
+            var minUsed = Infinity;
+            candidates.forEach(function(entry) {
+                var used = usage[entry.key] || 0;
+                if (used < minUsed) { minUsed = used; }
+            });
+            var leastUsed = candidates.filter(function(entry) { return (usage[entry.key] || 0) === minUsed; });
+            var picked = leastUsed[Math.floor(Math.random() * leastUsed.length)];
+            usage[picked.key] = (usage[picked.key] || 0) + 1;
+            return { entry: picked, matched: matched.length > 0 };
+        }
+
+        function ml_batch_plan_signature(dates) {
+            var startPoolInput = document.getElementById('batch-image_start-pool');
+            var endPoolInput = document.getElementById('batch-image_end-pool');
+            return [
+                ml_resolve_token(),
+                dates.join(','),
+                document.getElementById('batch-random-venue').checked
+                    ? 'random-venue'
+                    : ('venue:' + document.getElementById('select-route_info-batch').value),
+                document.getElementById('batch-random-time').checked ? 'random-time' : 'fixed-07',
+                ml_batch_photo_signature(startPoolInput ? startPoolInput.files : []),
+                ml_batch_photo_signature(endPoolInput ? endPoolInput.files : [])
+            ].join('||');
+        }
+
+        /*
+        ML Remark: 一次性生成整批轨迹
+        这里把"很多天的记录"一次性算完：每天一份 { 场地, 轨迹, 里程, 配速, 起止时间, 照片 }。
+        生成阶段只读服务端规则（listRule 一次）+ 历史记录（每月一次），不写任何表单状态，
+        所以 30 天和 1 天的区别只是循环次数，不会互相污染。
+        */
+        async function ml_prepare_batch_plans(options) {
+            options = options || {};
+            var token = ml_resolve_token();
+            if (!token) { throw new Error('请先填入 Token（「单次提交」或本页任一输入框都可以），再生成轨迹。'); }
+            if (!ml_local_check_token_form(token)) { throw new Error('Token 无效，请检查 Token 后再试。'); }
+            ml_student_token = token;
+            // 与单次提交同一套：getStudentInfo 校验 Token + listRule 重建场地表，整批只做一次
+            if (!await ml_check_token_post(token)) {
+                throw new Error('Token 接口校验失败，请重新获取 Token 后再批量提交。');
+            }
+
+            var skipWeekends = document.getElementById('batch-skip-weekends').checked;
+            var useRandomVenue = document.getElementById('batch-random-venue').checked;
+            var randomTime = document.getElementById('batch-random-time').checked;
+            var startPoolInput = document.getElementById('batch-image_start-pool');
+            var endPoolInput = document.getElementById('batch-image_end-pool');
+            var startPoolFiles = Array.from((startPoolInput && startPoolInput.files) || []);
+            var endPoolFiles = Array.from((endPoolInput && endPoolInput.files) || []);
+            if (startPoolFiles.length === 0 || endPoolFiles.length === 0) {
+                throw new Error('请先上传开始照片和结束照片（至少各一张）。');
+            }
+
+            var dates = (options.dates && options.dates.length > 0) ? options.dates.slice() : [];
+            if (dates.length === 0) {
+                var startDateStr = document.getElementById('batch-start-date').value;
+                var endDateStr = document.getElementById('batch-end-date').value;
+                if (!startDateStr || !endDateStr) { throw new Error('请选择开始和结束日期。'); }
+                dates = ml_getDateRange(startDateStr, endDateStr, skipWeekends);
+            }
+            if (dates.length === 0) { throw new Error('没有有效的日期（可能全部被跳过）。'); }
+
+            var allPlanIds = Object.keys(ml_all_route_info);
+            if (allPlanIds.length === 0) {
+                throw new Error('还没有从服务端读到场地。请确认 tools/token-tool/get-token.bat 的桥接窗口在运行，再重新提取 Token。');
+            }
+
+            var startPool = await ml_analyze_photo_pool(startPoolFiles);
+            var endPool = await ml_analyze_photo_pool(endPoolFiles);
+            // 禁止提前跑：整批共用一个"现在"，逐天判断时不会再抖
+            var nowGuard = await ml_fetchInternetTime();
+            var startUsage = {};
+            var endUsage = {};
+            var plans = [];
+            var errors = [];
+            var blockCourseConflict = document.getElementById('consistency-enable-auto-check').checked &&
+                document.getElementById('consistency-block-course-conflict').checked;
+            ml_record_month_cache = {};   // 同一个月的记录只查一次
+
+            for (var i = 0; i < dates.length; i++) {
+                var currentDate = dates[i];
+                ml_updateBatchProgress(i, dates.length,
+                    '正在生成轨迹 ' + (i + 1) + ' / ' + dates.length + '（' + currentDate + '）...');
+                try {
+                    // 当天已有有效记录就跳过，避免又提交出一条无效记录
+                    var existing = null;
+                    try {
+                        existing = await ml_find_existing_record(currentDate);
+                    } catch (readError) {
+                        console.warn('读取 ' + currentDate + ' 的历史记录失败，跳过重复检查:', readError);
+                    }
+                    if (existing && ml_is_counted_record(existing)) {
+                        errors.push({ date: currentDate, error: '当天已有有效记录：' + ml_describe_record(existing) });
+                        continue;
+                    }
+
+                    var planId = useRandomVenue
+                        ? allPlanIds[Math.floor(Math.random() * allPlanIds.length)]
+                        : document.getElementById('select-route_info-batch').value;
+                    var route = ml_all_route_info[planId];
+                    if (!route) {
+                        errors.push({ date: currentDate, error: '场地无效，请重新加载场地表' });
+                        continue;
+                    }
+
+                    var plan = await ml_build_plan_for_date(currentDate, route, {
+                        now: nowGuard,
+                        fixedStartHour: randomTime ? null : 7
+                    });
+                    var timeError = ml_check_plan_time(plan, nowGuard);
+                    if (timeError) {
+                        errors.push({ date: currentDate, error: timeError });
+                        continue;
+                    }
+                    if (blockCourseConflict) {
+                        var conflicts = ml_findScheduleConflicts(plan.start, plan.end);
+                        if (conflicts.length > 0) {
+                            errors.push({
+                                date: currentDate,
+                                error: '与课表冲突: ' + conflicts.map(function(item) {
+                                    return item.start + '-' + item.end;
+                                }).join('、')
+                            });
+                            continue;
+                        }
+                    }
+
+                    var period = ml_periodByDate(new Date(plan.start));
+                    var startPick = ml_pick_pool_photo(startPool, period, startUsage);
+                    var endPick = ml_pick_pool_photo(endPool, period, endUsage);
+                    plan.startFile = startPick.entry.file;
+                    plan.endFile = endPick.entry.file;
+                    plan.startPhotoName = startPick.entry.fileName;
+                    plan.endPhotoName = endPick.entry.fileName;
+                    plan.period = period;
+                    plan.warnings = [];
+                    if (startPool.length > 1 && !startPick.matched) {
+                        plan.warnings.push('开始照片池里没有' + ml_periodLabel(period) + '的照片');
+                    }
+                    if (endPool.length > 1 && !endPick.matched) {
+                        plan.warnings.push('结束照片池里没有' + ml_periodLabel(period) + '的照片');
+                    }
+                    plans.push(plan);
+                } catch (planError) {
+                    console.error('生成 ' + currentDate + ' 的轨迹失败:', planError);
+                    errors.push({ date: currentDate, error: planError.message || String(planError) });
+                }
+            }
+            ml_updateBatchProgress(dates.length, dates.length,
+                '轨迹已生成：' + plans.length + ' 天' + (errors.length > 0 ? '，' + errors.length + ' 天无法生成' : ''));
+            return { plans: plans, errors: errors, dates: dates, startPool: startPool, endPool: endPool };
+        }
+
+        var ml_weekday_names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+        function ml_formatPlanSummaryLine(plan) {
+            var km = (plan.metadata.totalDistance / 1000).toFixed(2);
+            var text = plan.date + ' ' + ml_weekday_names[new Date(plan.start).getDay()] + ' · ' + plan.routeName +
+                ' · ' + plan.start.split('T')[1].slice(0, 5) + '-' + plan.end.split('T')[1].slice(0, 5) +
+                ' · ' + km + ' km · ' + (plan.metadata.formattedPace || '-') + '/km' +
+                ' · 开始 ' + plan.startPhotoName + '（' + ml_periodLabel(plan.period) + '）' +
+                ' · 结束 ' + plan.endPhotoName;
+            if (plan.warnings && plan.warnings.length > 0) {
+                text += ' · ⚠ ' + plan.warnings.join('；');
+            }
+            return text;
+        }
+
+        function ml_renderBatchPlans() {
+            var area = document.getElementById('batch-plan-area');
+            var list = document.getElementById('batch-plan-list');
+            var summary = document.getElementById('batch-plan-summary');
+            if (!list || !summary) { return; }
+            var plans = ml_batch_state.plans || [];
+            var errors = ml_batch_state.planErrors || [];
+            list.innerHTML = '';
+            plans.forEach(function(plan) {
+                var li = document.createElement('li');
+                li.className = (plan.warnings && plan.warnings.length > 0) ? 'check-warn' : 'check-pass';
+                li.textContent = ml_formatPlanSummaryLine(plan);
+                list.appendChild(li);
+            });
+            errors.forEach(function(item) {
+                var li = document.createElement('li');
+                li.className = 'check-fail';
+                li.textContent = item.date + ': ' + item.error;
+                list.appendChild(li);
+            });
+            if (area) { area.style.display = (plans.length + errors.length) > 0 ? 'block' : 'none'; }
+            var poolText = '';
+            if (ml_batch_state.pools) {
+                poolText = ' 照片池：开始 ' + ml_photo_pool_summary(ml_batch_state.pools.startPool) +
+                    '，结束 ' + ml_photo_pool_summary(ml_batch_state.pools.endPool) + '。';
+            }
+            summary.textContent = plans.length > 0
+                ? ('已生成 ' + plans.length + ' 份轨迹' +
+                    (errors.length > 0 ? '，另有 ' + errors.length + ' 天无法生成' : '') + '。' + poolText)
+                : ('没能生成任何轨迹' + (errors.length > 0 ? '（' + errors.length + ' 天失败）' : '') + '。' + poolText);
+        }
+
+        // 提交一份预演好的方案：数据全部走 ml_active_submission，不再依赖当天的全局状态
+        async function ml_submit_batch_plan(ml_plan) {
+            ml_active_submission = {
+                date: ml_plan.date,
+                route: ml_plan.route,
+                track_data: { track: ml_plan.track, metadata: ml_plan.metadata },
+                start: ml_plan.start,
+                end: ml_plan.end,
+                startFile: ml_plan.startFile,
+                endFile: ml_plan.endFile
+            };
+            try {
+                // 让表单显示"正在提交的这一天"，只是可视化，取值仍以上下文为准
+                ml_exercise_start_time = ml_plan.start;
+                ml_exercise_end_time = ml_plan.end;
+                var startInput = document.getElementById('exercise-start_time');
+                var endInput = document.getElementById('exercise-end_time');
+                if (startInput) { startInput.value = ml_plan.start; }
+                if (endInput) { endInput.value = ml_plan.end; }
+                await ml_upload_start_record();
+                var delayMs = ml_simulated_delay_ms();
+                if (delayMs > 0) {
+                    await ml_interruptibleSleep(delayMs, function() { return ml_batch_state.abortRequested; });
+                }
+                await ml_upload_finish_record();
+                delete ml_record_month_cache[String(ml_plan.date).slice(0, 7)];  // 记录已变，作废当月缓存
+                return true;
+            } finally {
+                ml_active_submission = null;
+            }
+        }
+
+        function ml_loadBatchFailures() {
+            try {
+                return JSON.parse(localStorage.getItem('ml_seu_exercise_helper_batch_failures') || '[]');
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function ml_renderBatchFailures() {
+            var list = document.getElementById('batch-failed-list');
+            if (!list) { return; }
+            var failed = ml_loadBatchFailures();
+            list.innerHTML = '';
+            if (failed.length === 0) {
+                var empty = document.createElement('li');
+                empty.className = 'text-muted';
+                empty.textContent = '暂无失败记录';
+                list.appendChild(empty);
+                return;
+            }
+            failed.forEach(function(item) {
+                var li = document.createElement('li');
+                li.className = 'check-fail';
+                li.textContent = item.date + ': ' + item.error;
+                list.appendChild(li);
+            });
+        }
+
+        function ml_saveBatchFailures(results) {
+            var failed = results.filter(function(r){ return !r.success; }).map(function(r) {
+                return {
+                    date: r.date,
+                    error: r.error || '上传失败',
+                    savedAt: new Date().toISOString()
+                };
+            });
+            localStorage.setItem('ml_seu_exercise_helper_batch_failures', JSON.stringify(failed));
+            ml_renderBatchFailures();
+            return failed;
+        }
+
+        function ml_clearBatchFailures() {
+            localStorage.removeItem('ml_seu_exercise_helper_batch_failures');
+            ml_renderBatchFailures();
+        }
+
+        function ml_formatDate(d) {
+            var pad = function(n){return n.toString().padStart(2,'0');};
+            return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+        }
+
+        function ml_getDateRange(startStr, endStr, skipWeekends) {
+            var dates = [];
+            var cur = new Date(startStr);
+            var end = new Date(endStr);
+            while (cur <= end) {
+                var dow = cur.getDay();
+                if (!skipWeekends || (dow !== 0 && dow !== 6)) {
+                    dates.push(ml_formatDate(cur));
+                }
+                cur.setDate(cur.getDate() + 1);
+            }
+            return dates;
+        }
+
+        function ml_updateBatchProgress(current, total, msg) {
+            var percent = total > 0 ? Math.round((current / total) * 100) : 0;
+            var bar = document.getElementById('batch-progress-bar');
+            var txt = document.getElementById('batch-progress-text');
+            if (bar) { bar.style.width = percent + '%'; bar.textContent = percent + '%'; }
+            if (txt) { txt.textContent = msg; }
+        }
+
+        // 可中断 sleep：每 200ms 检查 shouldAbort()，提前 resolve
+        function ml_interruptibleSleep(ms, shouldAbort) {
+            return new Promise(function(resolve){
+                var start = Date.now();
+                var timer = setInterval(function(){
+                    if (shouldAbort() || Date.now() - start >= ms) {
+                        clearInterval(timer);
+                        resolve();
+                    }
+                }, 200);
+            });
+        }
+
+        function ml_stopBatchUpload() {
+            ml_batch_state.abortRequested = true;
+        }
+
+        async function ml_batch_upload(options) {
+            options = options || {};
+            if (ml_batch_state.isRunning) {
+                ml_show_Alert('批量上传', '批量上传正在进行中，请稍候...');
+                return;
+            }
+            ml_batch_state.isRunning = true;
+            var btn = document.getElementById('btn-submit-batch');
+            var retryBtn = document.getElementById('btn-retry-failed-batch');
+            if (btn) { btn.disabled = true; }
+            if (retryBtn) { retryBtn.disabled = true; }
+            try {
+                var token = ml_resolve_token();
+                if (!token) {
+                    ml_show_Alert('Token无效', '请先填入 Token（「单次提交」或本页任一输入框都可以，两处会自动同步）。');
+                    return;
+                }
+                if (!ml_local_check_token_form(token)) {
+                    ml_show_Alert('Token无效', 'Token无效，请检查Token!');
+                    return;
+                }
+                ml_student_token = token;
+
+                var dates;
+                if (options.dates && options.dates.length > 0) {
+                    dates = options.dates.slice();
+                } else {
+                    var startDateStr = document.getElementById('batch-start-date').value;
+                    var endDateStr = document.getElementById('batch-end-date').value;
+                    if (!startDateStr || !endDateStr) {
+                        ml_show_Alert('日期错误', '请选择开始和结束日期!');
+                        return;
+                    }
+                    dates = ml_getDateRange(startDateStr, endDateStr, document.getElementById('batch-skip-weekends').checked);
+                }
+                if (dates.length === 0) {
+                    ml_show_Alert('日期错误', '没有有效的日期（可能全部被跳过）!');
+                    return;
+                }
+                if ((document.getElementById('batch-image_start-pool').files || []).length === 0 ||
+                    (document.getElementById('batch-image_end-pool').files || []).length === 0) {
+                    ml_show_Alert('照片错误', '请先上传开始照片和结束照片（至少各一张）!');
+                    return;
+                }
+
+                ml_batch_state.currentDay = 0;
+                ml_batch_state.totalDays = dates.length;
+                ml_batch_state.results = [];
+                ml_batch_state.abortRequested = false;
+                var progressArea = document.getElementById('batch-progress-area');
+                if (progressArea) { progressArea.style.display = 'block'; }
+                if (btn) {
+                    btn.disabled = false;   // 允许点击以触发"停止"
+                    btn.textContent = '停止批量提交';
+                    btn.className = 'btn btn-danger w-100';
+                }
+                ml_batch_mode = true;
+
+                // 一次性生成整批轨迹；设置没变且已经生成过就直接复用（不用再等一遍）
+                var signature = ml_batch_plan_signature(dates);
+                if (ml_batch_state.planSignature !== signature ||
+                    (ml_batch_state.plans.length + ml_batch_state.planErrors.length) === 0) {
+                    ml_updateBatchProgress(0, dates.length, '正在一次性生成 ' + dates.length + ' 天的轨迹...');
+                    var prepared = await ml_prepare_batch_plans({ dates: dates });
+                    ml_batch_state.plans = prepared.plans;
+                    ml_batch_state.planErrors = prepared.errors;
+                    ml_batch_state.pools = { startPool: prepared.startPool, endPool: prepared.endPool };
+                    ml_batch_state.planSignature = signature;
+                    ml_renderBatchPlans();
+                }
+                var plans = ml_batch_state.plans.slice();
+                var planErrors = ml_batch_state.planErrors.slice();
+
+                if (plans.length === 0) {
+                    ml_saveBatchFailures(planErrors);
+                    ml_updateBatchProgress(dates.length, dates.length, '没有可提交的日期');
+                    ml_batch_mode = false;
+                    ml_show_Alert('无法批量提交', '❌ 这几天都没能生成可提交的轨迹：\n' +
+                        planErrors.slice(0, 5).map(function(item){ return item.date + ': ' + item.error; }).join('\n'));
+                    return;
+                }
+
+                var stopped = false;
+                var processedCount = 0;
+                for (var i = 0; i < plans.length; i++) {
+                    if (ml_batch_state.abortRequested) { stopped = true; break; }
+                    var plan = plans[i];
+                    ml_batch_state.currentDay = i + 1;
+                    // 批量模式每天轮换设备指纹
+                    ml_current_fingerprint = ml_pickRandomFingerprint();
+                    ml_system_info.user_agent = ml_current_fingerprint.user_agent;
+                    ml_system_info.referer = ml_current_fingerprint.referer;
+                    ml_updateBatchProgress(i + 1, plans.length,
+                        '正在提交第 ' + (i + 1) + ' / ' + plans.length + ' 天（' + plan.date + ' · ' + plan.routeName + '）...');
+                    try {
+                        // 方案可能是几分钟前生成的，提交前再守一次"不能提前跑"
+                        var nowForSubmit = await ml_fetchInternetTime();
+                        var submitTimeError = ml_check_plan_time(plan, nowForSubmit);
+                        if (submitTimeError) { throw new Error(submitTimeError); }
+                        await ml_submit_batch_plan(plan);
+                        ml_batch_state.results.push({ date: plan.date, success: true, error: null });
+                    } catch (err) {
+                        console.error('提交 ' + plan.date + ' 出错:', err);
+                        ml_batch_state.results.push({ date: plan.date, success: false, error: err.message || String(err) });
+                    }
+                    processedCount++;
+                    // 记录之间的间隔，与单次共用同一个可调值；可被 abort 中断
+                    if (i < plans.length - 1 && !ml_batch_state.abortRequested) {
+                        var batchDelayMs = ml_simulated_delay_ms();
+                        if (batchDelayMs > 0) {
+                            await ml_interruptibleSleep(batchDelayMs, function(){ return ml_batch_state.abortRequested; });
+                        }
+                    }
+                }
+                if (ml_batch_state.abortRequested) { stopped = true; }
+                if (stopped && processedCount < plans.length) {
+                    for (var pendingIndex = processedCount; pendingIndex < plans.length; pendingIndex++) {
+                        ml_batch_state.results.push({
+                            date: plans[pendingIndex].date,
+                            success: false,
+                            error: '用户停止，未处理'
+                        });
+                    }
+                }
+                // 预演阶段就失败的日期一并计入失败列表，「重新提交失败日期」据此重来
+                planErrors.forEach(function(item) {
+                    ml_batch_state.results.push({ date: item.date, success: false, error: item.error });
+                });
+                ml_batch_state.results.sort(function(a, b) {
+                    return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0);
+                });
+
+                var successes = ml_batch_state.results.filter(function(r){return r.success;}).length;
+                var fails = ml_batch_state.results.filter(function(r){return !r.success;}).length;
+                var failedRecords = ml_saveBatchFailures(ml_batch_state.results);
+                ml_updateBatchProgress(stopped ? processedCount : plans.length, plans.length, stopped ?
+                    '已停止。已处理 ' + processedCount + ' / ' + plans.length + ' 天。' :
+                    '完成！成功: ' + successes + ', 失败: ' + fails);
+                var resultMsg = (stopped ? '批量上传已停止\n' : (options.isRetry ? '失败日期重试完成！\n' : '批量上传完成！\n')) +
+                    (stopped ? '已处理: ' + processedCount + ' / ' + plans.length + ' 天\n' : '') +
+                    '成功: ' + successes + ' 天\n' +
+                    '失败: ' + fails + ' 天';
+                if (fails > 0) {
+                    var failItems = failedRecords.map(function(r){return r.date + ': ' + r.error;}).join('\n');
+                    resultMsg += '\n\n失败记录:\n' + failItems;
+                }
+                // 先解除批量静音（否则这条汇总提示会被 ml_show_Alert 自己吞掉）
+                ml_batch_mode = false;
+                ml_show_Alert(stopped ? '已停止' : (options.isRetry ? '失败日期重试完成' : '批量上传完成'), resultMsg);
+            } catch (error) {
+                console.error('批量提交失败:', error);
+                ml_batch_mode = false;
+                ml_show_Alert('批量提交失败', (error && error.message) ? error.message : String(error));
+            } finally {
+                // 确保任何退出路径都复位状态
+                ml_batch_state.isRunning = false;
+                ml_batch_mode = false;
+                ml_active_submission = null;
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '开始批量提交';
+                    btn.className = 'btn btn-primary w-100';
+                }
+                if (retryBtn) { retryBtn.disabled = false; }
+            }
+        }
+
+        // 「一次性生成全部轨迹」：只生成不提交，生成完先让人看一眼
+        async function ml_generate_batch_plans_now() {
+            if (ml_batch_state.isRunning) {
+                ml_show_Alert('批量上传', '批量提交正在进行中，请稍候...');
+                return false;
+            }
+            var plansButton = document.getElementById('btn-generate-batch-plans');
+            var progressArea = document.getElementById('batch-progress-area');
+            if (plansButton) { plansButton.disabled = true; plansButton.textContent = '生成中...'; }
+            if (progressArea) { progressArea.style.display = 'block'; }
+            try {
+                var prepared = await ml_prepare_batch_plans({});
+                ml_batch_state.plans = prepared.plans;
+                ml_batch_state.planErrors = prepared.errors;
+                ml_batch_state.pools = { startPool: prepared.startPool, endPool: prepared.endPool };
+                ml_batch_state.planSignature = ml_batch_plan_signature(prepared.dates);
+                ml_renderBatchPlans();
+                ml_show_Alert('轨迹已生成',
+                    '已生成 ' + prepared.plans.length + ' 份轨迹' +
+                    (prepared.errors.length > 0 ? '，' + prepared.errors.length + ' 天无法生成（见下方列表）' : '') +
+                    '\n\n开始照片池：' + ml_photo_pool_summary(prepared.startPool) +
+                    '\n结束照片池：' + ml_photo_pool_summary(prepared.endPool) +
+                    '\n\n确认无误后点「开始批量提交」。');
+                return true;
+            } catch (e) {
+                console.error('批量生成轨迹失败:', e);
+                ml_show_Alert('生成失败', '❌ ' + (e && e.message ? e.message : e));
+                return false;
+            } finally {
+                if (plansButton) { plansButton.disabled = false; plansButton.textContent = '🎲 一次性生成全部轨迹'; }
+            }
+        }
+
+        // 设置一改，之前生成的那批方案就作废，避免"看着 A 提交 B"
+        function ml_invalidate_batch_plans() {
+            if (ml_batch_state.plans.length === 0 && ml_batch_state.planErrors.length === 0) { return; }
+            ml_batch_state.plans = [];
+            ml_batch_state.planErrors = [];
+            ml_batch_state.pools = null;
+            ml_batch_state.planSignature = '';
+            ml_renderBatchPlans();
+            var summary = document.getElementById('batch-plan-summary');
+            if (summary) { summary.textContent = '设置已变更，需要重新生成轨迹（直接点「开始批量提交」也会自动重新生成）。'; }
         }
     </script>
 
@@ -10553,6 +11401,7 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                     // console.log("选择的路线的详细信息:\n", {ml_choose_route_data});
                     ml_choose_route_data = ml_all_route_info[selectedPlanId];
                     ml_student_choose_route_data = ml_student_route_all_info[selectedPlanId];
+                    ml_generated_track = null;  // 用户换了场地，之前那份生成结果不再适用
                     ml_clearTrackPreview();  // 换了场地，旧轨迹预览作废
                     console.log("选择的路线的详细信息:\n", ml_choose_route_data, "\n", ml_student_choose_route_data);
 
@@ -10586,72 +11435,25 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             // 「随机轨迹」按钮已并入上面的「一键生成时间+轨迹」，
             // 因为时间与轨迹必须互相推导，分开生成会导致里程/配速/时长对不上。
 
-            // ===================== 批量多日上传 =====================
-            var ml_batch_state = {
-                isRunning: false,
-                currentDay: 0,
-                totalDays: 0,
-                results: [],
-                abortRequested: false
-            };
-            function ml_getBatchFailureStorageKey() {
-                return 'ml_seu_exercise_helper_batch_failures';
-            }
-
-            function ml_loadBatchFailures() {
-                try {
-                    return JSON.parse(localStorage.getItem(ml_getBatchFailureStorageKey()) || '[]');
-                } catch (e) {
-                    return [];
-                }
-            }
-
-            function ml_saveBatchFailures(results) {
-                var failed = results.filter(function(r){ return !r.success; }).map(function(r) {
-                    return {
-                        date: r.date,
-                        error: r.error || '上传失败',
-                        savedAt: new Date().toISOString()
-                    };
-                });
-                localStorage.setItem(ml_getBatchFailureStorageKey(), JSON.stringify(failed));
-                ml_renderBatchFailures();
-                return failed;
-            }
-
-            function ml_clearBatchFailures() {
-                localStorage.removeItem(ml_getBatchFailureStorageKey());
-                ml_renderBatchFailures();
-            }
-
-            function ml_renderBatchFailures() {
-                var list = document.getElementById('batch-failed-list');
-                if (!list) return;
-                var failed = ml_loadBatchFailures();
-                list.innerHTML = '';
-                if (failed.length === 0) {
-                    var empty = document.createElement('li');
-                    empty.className = 'text-muted';
-                    empty.textContent = '暂无失败记录';
-                    list.appendChild(empty);
-                    return;
-                }
-                failed.forEach(function(item) {
-                    var li = document.createElement('li');
-                    li.className = 'check-fail';
-                    li.textContent = item.date + ': ' + item.error;
-                    list.appendChild(li);
-                });
-            }
-
+            // ===================== 批量多日提交（页面接线） =====================
+            // 批量逻辑都在页面级脚本里（ml_prepare_batch_plans / ml_batch_upload 等），
+            // 这里只负责把控件和状态接起来。
             (function initBatchTab() {
                 var today = new Date();
                 var pad = function(n){return n.toString().padStart(2,'0');};
                 var fmt = today.getFullYear() + '-' + pad(today.getMonth()+1) + '-' + pad(today.getDate());
-                var nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 6);
-                var fmt2 = nextWeek.getFullYear() + '-' + pad(nextWeek.getMonth()+1) + '-' + pad(nextWeek.getDate());
-                document.getElementById('batch-start-date').value = fmt;
-                document.getElementById('batch-end-date').value = fmt2;
+                // 默认给"最近一周补录"：结束日期是今天。之前默认到今天 +6 天，
+                // 而未来的日期一条都提交不了（不能提前跑），预演列表会整片报错。
+                var weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 6);
+                var fmt0 = weekAgo.getFullYear() + '-' + pad(weekAgo.getMonth()+1) + '-' + pad(weekAgo.getDate());
+                document.getElementById('batch-start-date').value = fmt0;
+                document.getElementById('batch-end-date').value = fmt;
+                ['batch-start-date', 'batch-end-date'].forEach(function(id) {
+                    document.getElementById(id).addEventListener('change', ml_invalidate_batch_plans);
+                });
+
+                // 照片池：校验类型与大小，并顺手把明暗度分布算出来，
+                // 让「池子里够不够白天/夜间的照片」在点生成之前就能看见
                 function validateBatchPool(input, countId) {
                     var files = Array.from(input.files || []);
                     var invalid = files.find(function(file) {
@@ -10663,281 +11465,49 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                         ml_show_Alert('照片池错误', '照片池只能包含图片文件，且单张不能超过 12 MB。');
                         return;
                     }
-                    document.getElementById(countId).textContent = '已选 ' + files.length + ' 张';
+                    var countEl = document.getElementById(countId);
+                    countEl.textContent = '已选 ' + files.length + ' 张（正在识别明暗度…）';
+                    ml_analyze_photo_pool(files).then(function(pool) {
+                        countEl.textContent = '已选 ' + files.length + ' 张（' + ml_photo_pool_breakdown(pool) + '）';
+                    }).catch(function() {
+                        countEl.textContent = '已选 ' + files.length + ' 张';
+                    });
                 }
-                document.getElementById('batch-image_start-pool').addEventListener('change', function(){
+                document.getElementById('batch-image_start-pool').addEventListener('change', function() {
                     validateBatchPool(this, 'batch-start-pool-count');
+                    ml_invalidate_batch_plans();
                 });
-                document.getElementById('batch-image_end-pool').addEventListener('change', function(){
+                document.getElementById('batch-image_end-pool').addEventListener('change', function() {
                     validateBatchPool(this, 'batch-end-pool-count');
+                    ml_invalidate_batch_plans();
                 });
+
+                // 场地 / 随机时间 / 跳过周末一改，之前生成的那批方案就作废
+                ['select-route_info-batch', 'batch-random-venue', 'batch-random-time', 'batch-skip-weekends'].forEach(function(id) {
+                    var field = document.getElementById(id);
+                    if (field) { field.addEventListener('change', ml_invalidate_batch_plans); }
+                });
+
+                // Token 只填一次：两处输入框双向同步
+                ['input-token', 'input-token-batch'].forEach(function(id) {
+                    var field = document.getElementById(id);
+                    if (!field) { return; }
+                    field.addEventListener('input', function() { ml_mirror_token(id); });
+                });
+
                 ml_renderBatchFailures();
             })();
 
-
-            document.getElementById('btn-random-time-batch').addEventListener('click', function() {
-                var now = new Date();
-                var dateStr = now.getFullYear() + '-' + (now.getMonth()+1).toString().padStart(2,'0') + '-' + now.getDate().toString().padStart(2,'0');
-                var durationSeconds = ml_student_choose_route_data.metadata ? ml_student_choose_route_data.metadata.totalTime : 480;
-                var generatedTime = ml_generateValidTimeForDate(dateStr, durationSeconds);
-                var startStr = generatedTime.start;
-                var endStr = generatedTime.end;
-                document.getElementById('exercise-start_time').value = startStr;
-                document.getElementById('exercise-end_time').value = endStr;
-                ml_exercise_start_time = startStr;
-                ml_exercise_end_time = endStr;
-                ml_check_valid_time_sync();
-                ml_show_Alert('随机时间已生成', '开始: ' + startStr.split('T')[1] + '\n结束: ' + endStr.split('T')[1]);
+            // 「一次性生成全部轨迹」：只生成不提交，生成完先核对一遍
+            document.getElementById('btn-generate-batch-plans').addEventListener('click', function() {
+                ml_generate_batch_plans_now();
             });
-
-            function ml_generateRandomTimeForDate(dateStr) {
-                // 直接使用轨迹 metadata 中的 totalTime（已在 generateRandomTrack 中确保 241~719 秒）
-                var durationSeconds = ml_student_choose_route_data.metadata ? ml_student_choose_route_data.metadata.totalTime : 480;
-                return ml_generateValidTimeForDate(dateStr, durationSeconds);
-            }
-
-            function ml_formatDate(d) {
-                var pad = function(n){return n.toString().padStart(2,'0');};
-                return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
-            }
-
-            function ml_getDateRange(startStr, endStr, skipWeekends) {
-                var dates = [];
-                var cur = new Date(startStr);
-                var end = new Date(endStr);
-                while (cur <= end) {
-                    var dow = cur.getDay();
-                    if (!skipWeekends || (dow !== 0 && dow !== 6)) {
-                        dates.push(ml_formatDate(cur));
-                    }
-                    cur.setDate(cur.getDate() + 1);
-                }
-                return dates;
-            }
-
-            function ml_updateBatchProgress(current, total, msg) {
-                var percent = Math.round((current / total) * 100);
-                var bar = document.getElementById('batch-progress-bar');
-                var txt = document.getElementById('batch-progress-text');
-                if (bar) { bar.style.width = percent + '%'; bar.textContent = percent + '%'; }
-                if (txt) txt.textContent = msg;
-            }
-
-            function ml_copyRandomFileToInput(srcFiles, tgtInputId) {
-                if (!srcFiles || srcFiles.length === 0) return false;
-                var file = srcFiles[Math.floor(Math.random() * srcFiles.length)];
-                var dt = new DataTransfer();
-                dt.items.add(file);
-                document.getElementById(tgtInputId).files = dt.files;
-                return true;
-            }
-
-            async function ml_batchUpload(options) {
-                options = options || {};
-                if (ml_batch_state.isRunning) {
-                    ml_show_Alert('批量上传', '批量上传正在进行中，请稍候...');
-                    return;
-                }
-                // 早期设置运行锁，防止 token 校验期间被重入
-                ml_batch_state.isRunning = true;
-                var btn = document.getElementById('btn-submit-batch');
-                var retryBtn = document.getElementById('btn-retry-failed-batch');
-                btn.disabled = true;
-                if (retryBtn) retryBtn.disabled = true;
-                try {
-                    var token = document.getElementById('input-token-batch').value.trim();
-                    if (!ml_local_check_token_form(token)) {
-                        ml_show_Alert('Token无效', 'Token无效，请检查Token!');
-                        return;
-                    }
-                    ml_student_token = token;
-                    var tokenValid = await ml_check_token_post(token);
-                    if (!tokenValid) {
-                        ml_show_Alert('Token无效', 'Token接口校验失败，请重新获取Token后再批量提交。');
-                        return;
-                    }
-                    var skipWeekends = document.getElementById('batch-skip-weekends').checked;
-                    var useRandomVenue = document.getElementById('batch-random-venue').checked;
-                    var randomTime = document.getElementById('batch-random-time').checked;
-                    var startPhotoPool = document.getElementById('batch-image_start-pool').files;
-                    var endPhotoPool = document.getElementById('batch-image_end-pool').files;
-                    if (startPhotoPool.length === 0 || endPhotoPool.length === 0) {
-                        ml_show_Alert('照片错误', '请先上传开始照片和结束照片（至少各一张）!');
-                        return;
-                    }
-                    var dates;
-                    if (options.dates && options.dates.length > 0) {
-                        dates = options.dates.slice();
-                    } else {
-                        var startDateStr = document.getElementById('batch-start-date').value;
-                        var endDateStr = document.getElementById('batch-end-date').value;
-                        if (!startDateStr || !endDateStr) {
-                            ml_show_Alert('日期错误', '请选择开始和结束日期!');
-                            return;
-                        }
-                        dates = ml_getDateRange(startDateStr, endDateStr, skipWeekends);
-                    }
-                    if (dates.length === 0) {
-                        ml_show_Alert('日期错误', '没有有效的日期（可能全部被跳过）!');
-                        return;
-                    }
-                    var allPlanIds = Object.keys(ml_all_route_info);
-                    ml_batch_mode = true;
-                    ml_batch_state.currentDay = 0;
-                    ml_batch_state.totalDays = dates.length;
-                    ml_batch_state.results = [];
-                    ml_batch_state.abortRequested = false;
-                    var stopped = false;
-                    document.getElementById('batch-progress-area').style.display = 'block';
-                    btn.disabled = false; // 允许点击以触发"停止"
-                    btn.textContent = '停止批量提交';
-                    btn.className = 'btn btn-danger w-100';
-                    for (var i = 0; i < dates.length; i++) {
-                        if (ml_batch_state.abortRequested) {
-                            stopped = true;
-                            break;
-                        }
-                        ml_batch_state.currentDay = i + 1;
-                        var currentDate = dates[i];
-                        // 批量模式每天轮换设备指纹
-                        ml_current_fingerprint = ml_pickRandomFingerprint();
-                        ml_system_info.user_agent = ml_current_fingerprint.user_agent;
-                        ml_system_info.referer = ml_current_fingerprint.referer;
-                        ml_updateBatchProgress(i + 1, dates.length, '正在处理第 ' + (i+1) + ' / ' + dates.length + ' 天 (' + currentDate + ')...');
-                        try {
-                            var planId;
-                            if (useRandomVenue) {
-                                planId = allPlanIds[Math.floor(Math.random() * allPlanIds.length)];
-                            } else {
-                                planId = document.getElementById('select-route_info-batch').value;
-                            }
-                            ml_choose_route_data = ml_all_route_info[planId];
-                            // 当天已有记录就跳过这一天，避免又提交出一条无效记录
-                            try {
-                                var existingRecordForDay = await ml_find_existing_record(currentDate);
-                                if (existingRecordForDay && ml_is_counted_record(existingRecordForDay)) {
-                                    ml_batch_state.results.push({
-                                        date: currentDate,
-                                        success: false,
-                                        error: '当天已有有效记录：' + ml_describe_record(existingRecordForDay)
-                                    });
-                                    continue;
-                                }
-                                if (existingRecordForDay) {
-                                    // 只有无效记录时不跳过这一天
-                                    console.warn(currentDate + ' 已有无效记录，继续提交:', existingRecordForDay);
-                                }
-                            } catch (e) {
-                                console.error('读取 ' + currentDate + ' 的历史记录失败，跳过重复检查:', e);
-                            }
-                            // 轨迹与时长一起生成，保证 duration = distance × pace
-                            var generated = await ml_generate_time_and_track(currentDate);
-                            ml_student_choose_route_data = { track: generated.track, metadata: generated.metadata };
-                            var times = {
-                                start: document.getElementById('exercise-start_time').value,
-                                end: document.getElementById('exercise-end_time').value
-                            };
-                            if (!randomTime) {
-                                // 固定 07:00 开始，时长仍取自对齐后的轨迹
-                                var pad2 = function(n){return n.toString().padStart(2,'0');};
-                                var parts = currentDate.split('-');
-                                var endDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]), 7, 0, 0);
-                                endDate.setSeconds(endDate.getSeconds() + generated.durationSeconds);
-                                times = {
-                                    start: currentDate + 'T07:00:00',
-                                    end: currentDate + 'T' + pad2(endDate.getHours()) + ':' + pad2(endDate.getMinutes()) + ':' + pad2(endDate.getSeconds())
-                                };
-                            }
-                            document.getElementById('exercise-start_time').value = times.start;
-                            document.getElementById('exercise-end_time').value = times.end;
-                            ml_exercise_start_time = times.start;
-                            ml_exercise_end_time = times.end;
-                            var courseConflicts = ml_findScheduleConflicts(times.start, times.end);
-                            if (document.getElementById('consistency-enable-auto-check').checked && courseConflicts.length > 0 && document.getElementById('consistency-block-course-conflict').checked) {
-                                ml_batch_state.results.push({date: currentDate, success: false, error: '与课表冲突: ' + courseConflicts.map(function(item){ return item.start + '-' + item.end; }).join('、')});
-                                continue;
-                            }
-                            ml_copyRandomFileToInput(startPhotoPool, 'input-image_start');
-                            ml_copyRandomFileToInput(endPhotoPool, 'input-image_end');
-                            if (!ml_check_valid_time_sync()) {
-                                ml_batch_state.results.push({date: currentDate, success: false, error: '时间超出规则范围'});
-                                continue;
-                            }
-                            var success = await ml_one_click_upload();
-                            ml_batch_state.results.push({date: currentDate, success: success, error: success ? null : '上传失败'});
-                        } catch (err) {
-                            console.error('处理 ' + currentDate + ' 出错:', err);
-                            ml_batch_state.results.push({date: currentDate, success: false, error: err.message || String(err)});
-                        }
-                        // 记录之间的间隔，与单次共用同一个可调值；可被 abort 中断
-                        if (i < dates.length - 1 && !ml_batch_state.abortRequested) {
-                            var batchDelayMs = ml_simulated_delay_ms();
-                            if (batchDelayMs > 0) {
-                                await ml_interruptibleSleep(batchDelayMs, function(){ return ml_batch_state.abortRequested; });
-                            }
-                        }
-                    }
-                    if (ml_batch_state.abortRequested) {
-                        stopped = true;
-                    }
-                    var processedDays = Math.min(i, dates.length);
-                    if (stopped && processedDays < dates.length) {
-                        for (var pendingIndex = processedDays; pendingIndex < dates.length; pendingIndex++) {
-                            ml_batch_state.results.push({
-                                date: dates[pendingIndex],
-                                success: false,
-                                error: '用户停止，未处理'
-                            });
-                        }
-                    }
-                    var successes = ml_batch_state.results.filter(function(r){return r.success;}).length;
-                    var fails = ml_batch_state.results.filter(function(r){return !r.success;}).length;
-                    var failedRecords = ml_saveBatchFailures(ml_batch_state.results);
-                    ml_updateBatchProgress(stopped ? processedDays : dates.length, dates.length, stopped ?
-                        '已停止。已处理 ' + processedDays + ' / ' + dates.length + ' 天。' :
-                        '完成！成功: ' + successes + ', 失败: ' + fails);
-                    var resultMsg = (stopped ? '批量上传已停止\n' : (options.isRetry ? '失败日期重试完成！\n' : '批量上传完成！\n')) +
-                        (stopped ? '已处理: ' + processedDays + ' / ' + dates.length + ' 天\n' : '') +
-                        '成功: ' + successes + ' 天\n' +
-                        '失败: ' + fails + ' 天';
-                    if (fails > 0) {
-                        var failItems = failedRecords.map(function(r){return r.date + ': ' + r.error;}).join('\n');
-                        resultMsg += '\n\n失败记录:\n' + failItems;
-                    }
-                    ml_show_Alert(stopped ? '已停止' : (options.isRetry ? '失败日期重试完成' : '批量上传完成'), resultMsg);
-                } finally {
-                    // 确保任何退出路径都复位状态
-                    ml_batch_state.isRunning = false;
-                    ml_batch_mode = false;
-                    btn.disabled = false;
-                    btn.textContent = '开始批量提交';
-                    btn.className = 'btn btn-primary w-100';
-                    if (retryBtn) retryBtn.disabled = false;
-                }
-            }
-
-            // 可中断 sleep：每 200ms 检查 shouldAbort()，提前 resolve
-            function ml_interruptibleSleep(ms, shouldAbort) {
-                return new Promise(function(resolve){
-                    var start = Date.now();
-                    var timer = setInterval(function(){
-                        if (shouldAbort() || Date.now() - start >= ms) {
-                            clearInterval(timer);
-                            resolve();
-                        }
-                    }, 200);
-                });
-            }
-
-            function ml_stopBatchUpload() {
-                ml_batch_state.abortRequested = true;
-            }
 
             document.getElementById('btn-submit-batch').addEventListener('click', function() {
                 if (ml_batch_state.isRunning) {
                     ml_stopBatchUpload();
                 } else {
-                    ml_batchUpload();
+                    ml_batch_upload();
                 }
             });
 
@@ -10952,9 +11522,8 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                     return;
                 }
                 var dates = Array.from(new Set(failed.map(function(item){ return item.date; }))).sort();
-                ml_batchUpload({ dates: dates, isRetry: true });
+                ml_batch_upload({ dates: dates, isRetry: true });
             });
-
         });
     </script>
 </body>

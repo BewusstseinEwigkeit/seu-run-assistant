@@ -14,6 +14,120 @@ const TEST_JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoidGVzdC11c2VyIiwiZXhwIjoxN
 
 test.use({ channel: 'chrome' });
 
+const PAGE_URL = pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href;
+
+// 两张纯色小图：白=白天照片，深色=夜间照片。用来验证照片池的明暗度匹配。
+const WHITE_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAI0lEQVR4nGP89esXAymAiSTVDKMaiANMRKqDg1ENxACSQwkAJ5sDDoQWAdsAAAAASUVORK5CYII=', 'base64');
+const DARK_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAI0lEQVR4nGPk4OBgIAUwkaSaYVQDcYCJSHVwMKqBGEByKAEAfWAAOF8xZ3AAAAAASUVORK5CYII=', 'base64');
+
+function imageFile(name, buffer) {
+  return { name: name, mimeType: 'image/png', buffer: buffer };
+}
+
+// 服务端 listRule 的两块矩形场地（真实的 latlngs 就是这种粗角点）
+const TEST_RULES = {
+  code: 200,
+  success: true,
+  data: [{
+    ruleId: 'r1',
+    routeRule: '2026~2027学年1学期锻炼任务',
+    minTime: '4',
+    maxTime: '12',
+    minPace: '3.3333',
+    maxPace: '10',
+    standardKilometre: '1.2',
+    ruleStartTime: '06:00:00',
+    ruleEndTime: '22:30:00',
+    plans: [{
+      planId: 'p1',
+      routeName: '测试桃园田径场',
+      routeKilometre: 1.2,
+      latlngs: [
+        { lat: 31.8890, lng: 118.8280 },
+        { lat: 31.8890, lng: 118.8300 },
+        { lat: 31.8910, lng: 118.8300 },
+        { lat: 31.8910, lng: 118.8280 }
+      ]
+    }, {
+      planId: 'p2',
+      routeName: '测试梅园田径场',
+      routeKilometre: 1.2,
+      latlngs: [
+        { lat: 31.8830, lng: 118.8288 },
+        { lat: 31.8830, lng: 118.8300 },
+        { lat: 31.8846, lng: 118.8300 },
+        { lat: 31.8846, lng: 118.8288 }
+      ]
+    }]
+  }]
+};
+
+// 桥接服务的假实现：转发接口全部拦下来，只回固定数据。
+// 需要预检（blade-requested-with / miniappversion 这类非白名单头）时也要能通过，
+// 所以 OPTIONS 单独回一次带 CORS 头的 204。
+async function mockBridgeApi(page, captured) {
+  const corsHeaders = {
+    'access-control-allow-origin': '*',
+    'access-control-allow-headers': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS'
+  };
+  await page.route('http://127.0.0.1:17864/api/**', async (route) => {
+    const request = route.request();
+    const url = request.url();
+    if (request.method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: corsHeaders, body: '' });
+      return;
+    }
+    let body = { code: 200, success: true, data: {} };
+    if (url.indexOf('listRule') >= 0) {
+      body = TEST_RULES;
+    } else if (url.indexOf('getRecordByMonthOrWeek') >= 0) {
+      body = { code: 200, success: true, data: { recordList: [] } };
+    } else if (url.indexOf('uploadRecordImageStart') >= 0) {
+      body = { code: 200, success: true, msg: 'https://example.invalid/start.jpg', data: {} };
+    } else if (url.indexOf('uploadRecordImageEnd') >= 0) {
+      body = { code: 200, success: true, msg: 'https://example.invalid/end.jpg', data: {} };
+    } else if (url.indexOf('saveStartRecord') >= 0) {
+      body = { code: 200, success: true, data: { id: 'record-1' } };
+    } else if (url.indexOf('saveRecord') >= 0) {
+      body = { code: 200, success: true, data: null };
+    }
+    if (captured) {
+      captured.push({
+        url: url,
+        method: request.method(),
+        body: request.postData() || '',
+        headers: request.headers()
+      });
+    }
+    await route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      contentType: 'application/json',
+      body: JSON.stringify(body)
+    });
+  });
+}
+
+// 过去 N 天的日期（不含今天），避免"禁止提前跑"影响断言
+async function pastDates(page, days) {
+  return await page.evaluate((count) => {
+    const out = [];
+    for (let i = count; i >= 1; i -= 1) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      out.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+    }
+    return out;
+  }, days);
+}
+
+async function selectBatchRange(page, dates) {
+  await page.locator('#batch-start-date').fill(dates[0]);
+  await page.locator('#batch-end-date').fill(dates[dates.length - 1]);
+  await page.locator('#batch-skip-weekends').uncheck();
+}
+
 test('首屏实际表单与大图教程在桌面和手机均可读', async ({ page }) => {
   const pageUrl = pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href;
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -443,3 +557,299 @@ test('历史记录面板展开后渲染记录', async ({ page }) => {
   await expect(list.nth(1)).toHaveClass(/text-danger/);
   await expect(page.locator('#history-summary-note')).toContainText('2 条记录');
 });
+
+test('批量页与单次页共用一个 Token，不用填两遍', async ({ page }) => {
+  await page.goto(PAGE_URL);
+  await page.locator('#tab-batch').click();
+
+  // 单次页填一次 → 批量页自动跟上
+  await page.locator('#input-token').fill(`bearer ${TEST_JWT}`);
+  await expect(page.locator('#input-token-batch')).toHaveValue(`bearer ${TEST_JWT}`);
+  expect(await page.evaluate(() => window.ml_resolve_token())).toBe(`bearer ${TEST_JWT}`);
+
+  // 反过来在批量页填 → 单次页也跟上，Token 始终只有一份
+  await page.locator('#input-token-batch').fill(`| Blade-Auth | bearer ${TEST_JWT} |`);
+  await expect(page.locator('#input-token')).toHaveValue(`| Blade-Auth | bearer ${TEST_JWT} |`);
+  await expect(page.locator('#token-validation-message-batch')).toBeHidden();
+  await expect(page.locator('#token-validation-message')).toBeHidden();
+  expect(await page.evaluate(() => window.ml_local_check_token_form(window.ml_resolve_token()))).toBe(true);
+});
+
+test('照片池按明暗度匹配时段，并尽量轮换使用', async ({ page }) => {
+  await page.goto(PAGE_URL);
+
+  const result = await page.evaluate(() => {
+    const pool = [
+      { key: 'd1', fileName: 'day1.png', period: 'day' },
+      { key: 'd2', fileName: 'day2.png', period: 'day' },
+      { key: 'n1', fileName: 'night1.png', period: 'night' }
+    ];
+    const nightUsage = {};
+    const nightPicks = [0, 1, 2].map(function() {
+      return window.ml_pick_pool_photo(pool, 'night', nightUsage).entry.fileName;
+    });
+    const dayUsage = {};
+    const dayPicks = [0, 1].map(function() {
+      return window.ml_pick_pool_photo(pool, 'day', dayUsage).entry.fileName;
+    });
+    const noNightPool = [{ key: 'd1', fileName: 'day1.png', period: 'day' }];
+    const fallback = window.ml_pick_pool_photo(noNightPool, 'night', {});
+    return {
+      nightPicks: nightPicks,
+      dayPicks: dayPicks.slice().sort(),
+      fallback: { fileName: fallback.entry.fileName, matched: fallback.matched },
+      summary: window.ml_photo_pool_summary(pool)
+    };
+  });
+
+  // 夜间的记录只挑夜间照片
+  expect(result.nightPicks).toEqual(['night1.png', 'night1.png', 'night1.png']);
+  // 白天的记录在白天的照片之间轮换，不会反复抽到同一张
+  expect(result.dayPicks).toEqual(['day1.png', 'day2.png']);
+  // 池里没有对应时段的照片时退回全池，并把"没匹配上"告诉调用方
+  expect(result.fallback.fileName).toBe('day1.png');
+  expect(result.fallback.matched).toBe(false);
+  expect(result.summary).toContain('白天 2');
+  expect(result.summary).toContain('夜间 1');
+});
+
+test('批量一次性生成多份轨迹，刷新场地表也不会丢掉生成结果', async ({ page }) => {
+  await page.goto(PAGE_URL);
+  await mockBridgeApi(page);
+  await page.route('https://worldtimeapi.org/**', (route) => route.abort());
+
+  await page.locator('#input-token').fill(`bearer ${TEST_JWT}`);
+  await page.locator('#tab-batch').click();
+  await page.locator('#batch-image_start-pool').setInputFiles([
+    imageFile('day1.png', WHITE_PNG),
+    imageFile('day2.png', WHITE_PNG),
+    imageFile('night1.png', DARK_PNG)
+  ]);
+  await page.locator('#batch-image_end-pool').setInputFiles([
+    imageFile('end-day1.png', WHITE_PNG),
+    imageFile('end-night1.png', DARK_PNG)
+  ]);
+  const dates = await pastDates(page, 2);
+  await selectBatchRange(page, dates);
+  await page.locator('#batch-random-time').uncheck();   // 固定 07:00 → 白天
+
+  const prepared = await page.evaluate(async () => {
+    const result = await window.ml_prepare_batch_plans({});
+    return {
+      errors: result.errors,
+      poolSummary: window.ml_photo_pool_summary(result.startPool),
+      plans: result.plans.map(function(plan) {
+        return {
+          date: plan.date,
+          planId: plan.planId,
+          routeName: plan.routeName,
+          trackLength: plan.track.length,
+          start: plan.start,
+          end: plan.end,
+          durationSeconds: plan.durationSeconds,
+          distance: plan.metadata.totalDistance,
+          period: plan.period,
+          startPhoto: plan.startPhotoName,
+          endPhoto: plan.endPhotoName,
+          inside: plan.track.every(function(point) {
+            return window.ml_isPointInPolygon(point.lat, point.lng, window.ml_boundary_cache[plan.planId].paths);
+          })
+        };
+      })
+    };
+  });
+
+  // 一次生成多份：两天各一份，而且都是服务端下发的场地
+  expect(prepared.errors).toEqual([]);
+  expect(prepared.plans.length).toBe(2);
+  expect(prepared.poolSummary).toContain('白天 2');
+  prepared.plans.forEach((plan, index) => {
+    expect(plan.date).toBe(dates[index]);
+    expect(['p1', 'p2']).toContain(plan.planId);
+    expect(plan.trackLength).toBeGreaterThan(10);
+    expect(plan.inside).toBe(true);
+    expect(plan.distance).toBeGreaterThanOrEqual(1200);
+    expect(plan.durationSeconds).toBeGreaterThanOrEqual(240);
+    expect(plan.durationSeconds).toBeLessThanOrEqual(720);
+    expect(plan.start.slice(0, 10)).toBe(plan.date);
+    expect(plan.end.slice(0, 10)).toBe(plan.date);
+    // 07:00 是白天 → 抽到白天的照片
+    expect(plan.period).toBe('day');
+    expect(plan.startPhoto).toMatch(/^day/);
+    expect(plan.endPhoto).toBe('end-day1.png');
+  });
+
+  // 把时间固定成晚上：同一批照片应该换成夜间那张
+  // （随机时间关掉时走的是"固定 07:00"，所以这里要重新打开随机时间，让生成器可用）
+  await page.locator('#batch-random-time').check();
+  const nightPlans = await page.evaluate(async () => {
+    const original = window.ml_generateValidTimeForDate;
+    window.ml_generateValidTimeForDate = function(dateStr, durationSeconds) {
+      const pad = (n) => String(n).padStart(2, '0');
+      const start = new Date(dateStr + 'T21:05:00');
+      const end = new Date(start.getTime() + durationSeconds * 1000);
+      const hhmmss = (d) => pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+      return { start: dateStr + 'T' + hhmmss(start), end: dateStr + 'T' + hhmmss(end) };
+    };
+    try {
+      const result = await window.ml_prepare_batch_plans({});
+      return result.plans.map(function(plan) {
+        return { period: plan.period, startPhoto: plan.startPhotoName, endPhoto: plan.endPhotoName, start: plan.start };
+      });
+    } finally {
+      window.ml_generateValidTimeForDate = original;
+    }
+  });
+  expect(nightPlans.length).toBe(2);
+  nightPlans.forEach((plan) => {
+    expect(plan.start).toContain('T21:05:00');
+    expect(plan.period).toBe('night');
+    expect(plan.startPhoto).toBe('night1.png');
+    expect(plan.endPhoto).toBe('end-night1.png');
+  });
+
+  // 预演结果落进页面列表
+  await page.locator('#batch-random-time').uncheck();
+  const rendered = await page.evaluate(async () => {
+    const result = await window.ml_prepare_batch_plans({});
+    window.ml_batch_state.plans = result.plans;
+    window.ml_batch_state.planErrors = result.errors;
+    window.ml_batch_state.pools = { startPool: result.startPool, endPool: result.endPool };
+    window.ml_renderBatchPlans();
+    return {
+      rows: document.querySelectorAll('#batch-plan-list li').length,
+      summary: document.getElementById('batch-plan-summary').textContent,
+      firstRow: document.querySelector('#batch-plan-list li').textContent
+    };
+  });
+  expect(rendered.rows).toBe(2);
+  expect(rendered.summary).toContain('已生成 2 份轨迹');
+  expect(rendered.firstRow).toContain('km');
+
+  // 提交前会重新拉一次 listRule；刷新不能把已经生成好的轨迹换成服务端的粗角点
+  const preserved = await page.evaluate(async () => {
+    const planId = 'p1';
+    window.ml_student_token = window.ml_resolve_token();
+    window.ml_boundary_cache[planId] = { paths: window.ml_boundary_cache[planId].paths };
+    window.ml_choose_route_data = window.ml_all_route_info[planId];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const ymd = yesterday.getFullYear() + '-' +
+      String(yesterday.getMonth() + 1).padStart(2, '0') + '-' +
+      String(yesterday.getDate()).padStart(2, '0');
+    const generated = await window.ml_generate_time_and_track(ymd);
+    const before = {
+      trackLength: window.ml_student_choose_route_data.track.length,
+      planId: window.ml_choose_route_data.plan_id
+    };
+    await window.ml_load_route_data_from_server(window.ml_student_token);
+    return {
+      generatedTrackLength: generated.track.length,
+      before: before,
+      afterTrackLength: window.ml_student_choose_route_data.track.length,
+      afterPlanId: window.ml_choose_route_data.plan_id
+    };
+  });
+  expect(preserved.before.planId).toBe('p1');
+  expect(preserved.afterPlanId).toBe('p1');
+  // 刷新后拿到的仍然是那份生成好的密集轨迹（服务端原始 latlngs 只有 4 个点）
+  expect(preserved.afterTrackLength).toBe(preserved.before.trackLength);
+  expect(preserved.afterTrackLength).toBe(preserved.generatedTrackLength);
+  expect(preserved.afterTrackLength).toBeGreaterThan(10);
+});
+
+test('批量提交直接用预演好的方案，请求体与服务端规则对齐', async ({ page }) => {
+  await page.goto(PAGE_URL);
+  const captured = [];
+  await mockBridgeApi(page, captured);
+  await page.route('https://worldtimeapi.org/**', (route) => route.abort());
+
+  await page.locator('#input-token').fill(`bearer ${TEST_JWT}`);
+  await page.locator('#tab-batch').click();
+  await page.locator('#batch-image_start-pool').setInputFiles([imageFile('day1.png', WHITE_PNG)]);
+  await page.locator('#batch-image_end-pool').setInputFiles([imageFile('end-day1.png', WHITE_PNG)]);
+  await page.locator('#batch-random-time').uncheck();
+  await page.locator('#input-simulated-delay-batch').fill('0');
+  const dates = await pastDates(page, 2);
+  await selectBatchRange(page, dates);
+  // 场地表由服务端下发后再选；批量下拉框里的选项就是这里重建的
+  await expect(page.locator('#select-route_info')).toHaveValue('p1', { timeout: 8000 });
+  await page.selectOption('#select-route_info-batch', 'p1');
+
+  // 不先点「一次性生成全部轨迹」：提交本身就要先把整批轨迹生成出来
+  await page.evaluate(() => window.ml_batch_upload({}));
+
+  await expect(page.locator('#ml_Alert_Title')).toHaveText('批量上传完成');
+  await expect(page.locator('#batch-progress-text')).toContainText('成功: 2');
+  await expect(page.locator('#batch-plan-list li')).toHaveCount(2);
+  await expect(page.locator('#batch-plan-summary')).toContainText('已生成 2 份轨迹');
+
+  const saveStart = captured.filter((item) => item.url.indexOf('saveStartRecord') >= 0);
+  const saveRecord = captured.filter((item) => item.url.indexOf('saveRecord') >= 0);
+  const imageStart = captured.filter((item) => item.url.indexOf('uploadRecordImageStart') >= 0);
+  const imageEnd = captured.filter((item) => item.url.indexOf('uploadRecordImageEnd') >= 0);
+  expect(saveStart.length).toBe(2);
+  expect(saveRecord.length).toBe(2);
+  expect(imageStart.length).toBe(2);
+  expect(imageEnd.length).toBe(2);
+
+  // 图片上传仍然走 v1 前缀 + miniappversion，写记录走 v2 前缀 + 加密请求体
+  expect(imageStart[0].url).toContain('/api/blade-exercise/exerciseRecord/uploadRecordImageStart');
+  expect(imageStart[0].headers['miniappversion']).toBe('V2.1.7');
+  expect(saveStart[0].url).toContain('/api/blade-exercise/v2/exerciseRecord/saveStartRecord');
+  expect(saveRecord[0].url).toContain('/api/blade-exercise/v2/exerciseRecord/saveRecord');
+
+  const decoded = [];
+  for (const item of saveStart.concat(saveRecord)) {
+    decoded.push({
+      kind: item.url.indexOf('saveStartRecord') >= 0 ? 'start' : 'finish',
+      headers: item.headers,
+      payload: JSON.parse(await page.evaluate((body) => window.ml_aes_decrypt(body), item.body))
+    });
+  }
+
+  decoded.forEach((item) => {
+    // 请求体是 AES 密文，服务端拿到明文后能读到当天的场地与时间
+    expect(item.payload.planId).toBe('p1');
+    expect(item.payload.routeName).toBe('测试桃园田径场');
+    expect(item.payload.ruleId).toBe('r1');
+    expect(dates).toContain(item.payload.recordTime);
+    // Playwright 的 request.headers() 一律小写
+    expect(item.headers['blade-requested-with']).toBe('BladeHttpRequest');
+    expect(item.headers['blade-auth']).toBe(`bearer ${TEST_JWT}`);
+    expect(item.headers['authorization']).toBe('Basic d2VjaGF0OndlY2hhdF9zZWNyZXQ=');
+    // 小程序从不发 Tenant-Id：租户在 Token 里
+    expect(item.headers['tenant-id']).toBeUndefined();
+  });
+
+  const finishPayloads = decoded.filter((item) => item.kind === 'finish');
+  finishPayloads.forEach((item) => {
+    // 提交的是生成好的密集轨迹，而不是服务端下发的 4 个角点
+    const track = JSON.parse(item.payload.strLatitudeLongitude);
+    expect(track.length).toBeGreaterThan(10);
+    expect(item.payload.endImage).toBe('https://example.invalid/end.jpg');
+    expect(item.payload.routeKilometre).toBeGreaterThanOrEqual(1.2);
+    expect(item.payload.exerciseTimes).toBeGreaterThanOrEqual(240);
+    expect(item.payload.exerciseTimes).toBeLessThanOrEqual(720);
+  });
+  expect(finishPayloads.map((item) => item.payload.recordTime).sort()).toEqual(dates.slice().sort());
+
+  // 失败日期重试：按失败列表里的日期重新生成 + 重新提交，不需要用户再填一遍任何东西
+  await page.locator('#ml_Alert_Ok').click();
+  const retryDate = (await pastDates(page, 3))[0];
+  await page.evaluate((date) => {
+    localStorage.setItem('ml_seu_exercise_helper_batch_failures', JSON.stringify([{ date: date, error: '网络错误' }]));
+  }, retryDate);
+  const savesBeforeRetry = captured.filter((item) => item.url.indexOf('saveRecord') >= 0).length;
+  await page.locator('#btn-retry-failed-batch').click();
+  await expect(page.locator('#ml_Alert_Title')).toHaveText('失败日期重试完成');
+  await expect(page.locator('#batch-plan-list li')).toHaveCount(1);
+  await expect(page.locator('#batch-plan-list li').first()).toContainText(retryDate);
+  const retriedSaves = captured.filter((item) => item.url.indexOf('saveRecord') >= 0).slice(savesBeforeRetry);
+  expect(retriedSaves.length).toBe(1);
+  const retriedPayload = JSON.parse(await page.evaluate((body) => window.ml_aes_decrypt(body), retriedSaves[0].body));
+  expect(retriedPayload.recordTime).toBe(retryDate);
+  // 重试成功后失败列表应该被清空
+  await expect(page.locator('#batch-failed-list')).toContainText('暂无失败记录');
+});
+
