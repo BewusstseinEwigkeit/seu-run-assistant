@@ -4003,6 +4003,327 @@
                 font-size: 25px;
             }
         }
+        /* ==========================================================================
+           v3 布局收紧
+           1) 首屏标题回到第一屏：原来 .hero-layout 是 align-items:center，右侧表单卡很高，
+              文案被垂直居中顶到了折线以下。
+           2) 全站纵向节奏压缩：表单卡、照片区、折叠区都更紧凑，页面明显变短。
+           前面有多层历史样式，这里统一在最后覆盖，避免逐层去改。
+           ========================================================================== */
+        .hero-layout {
+            align-items: start;
+            gap: clamp(28px, 3.2vw, 56px);
+        }
+
+        .app-hero {
+            min-height: auto;
+            padding: clamp(30px, 3vw, 46px) 28px clamp(44px, 4.4vw, 68px);
+        }
+
+        .hero-copy {
+            padding-top: 2px;
+        }
+
+        .hero-kicker {
+            font-size: 13px;
+            letter-spacing: 0.2em;
+        }
+
+        .hero-brand-title {
+            margin-top: 10px;
+            font-size: clamp(74px, 4.9vw, 82px);
+            line-height: 0.88;
+        }
+
+        .app-hero .hero-cn-title {
+            margin-top: 12px;
+        }
+
+        .hero-lead {
+            max-width: 42ch;
+            margin-top: 14px;
+            font-size: 16px;
+            line-height: 1.68;
+        }
+
+        .hero-flow {
+            gap: 10px;
+            margin-top: 22px;
+        }
+
+        .hero-flow-step {
+            gap: 10px;
+            padding: 11px 13px;
+        }
+
+        .hero-flow-step small {
+            line-height: 1.45;
+        }
+
+        .hero-actions {
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .token-bridge-status,
+        .hero-network-note {
+            margin-top: 12px;
+            font-size: 13px;
+            line-height: 1.62;
+        }
+
+        /* 表单卡：字段间距与面板内边距收紧 */
+        .hero-quick-panel {
+            padding: 22px 24px;
+        }
+
+        .hero-panel-heading {
+            margin-bottom: 16px;
+        }
+
+        .hero-panel-heading img {
+            width: 40px;
+            height: 40px;
+        }
+
+        .hero-quick-panel .hero-field {
+            margin-bottom: 11px;
+        }
+
+        .hero-quick-panel .form-label {
+            margin-bottom: 5px;
+        }
+
+        .hero-panel-tools {
+            margin: 12px 0 10px;
+        }
+
+        .pace-panel {
+            padding: 11px 13px;
+            margin-bottom: 12px !important;
+        }
+
+        .pace-panel .form-range {
+            margin: 2px 0 4px;
+        }
+
+        .pace-panel .form-check {
+            min-height: auto;
+            margin-bottom: 2px;
+        }
+
+        .pace-panel .text-muted {
+            font-size: 12.5px;
+            line-height: 1.55;
+        }
+
+        .pace-panel #input-track-inset,
+        .pace-panel #input-track-inset-batch {
+            max-width: 118px;
+        }
+
+        /* 轨迹空状态：图和文案并排，别各占一屏 */
+        .track-empty {
+            flex-direction: row;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 14px;
+            text-align: left;
+        }
+
+        .track-empty img {
+            flex: 0 0 auto;
+            width: 168px;
+            max-width: 38%;
+            max-height: 92px;
+        }
+
+        .track-empty span {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* 照片区：上传框与预览框并排，高度减半（原来上下两段各占 300px 上下） */
+        .photo-pair {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+            align-items: start;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .photo-pair .photo-upload-card {
+            margin-bottom: 0 !important;
+        }
+
+        .photo-pair .photo-upload-zone {
+            min-height: 152px;
+        }
+
+        .photo-pair .photo-upload-zone strong {
+            font-size: 13.5px;
+        }
+
+        .photo-pair .preview-image {
+            min-height: 152px;
+            max-height: 200px;
+        }
+
+        .photo-pair .preview-image img {
+            max-height: 176px;
+        }
+
+        /* 照片横幅与工作台标题收紧 */
+        .photo-guidance {
+            gap: 16px;
+            padding: 12px 16px;
+            margin-bottom: 14px !important;
+        }
+
+        .photo-guidance img {
+            max-height: 118px;
+        }
+
+        .photo-guidance p {
+            line-height: 1.6;
+        }
+
+        .workbench-intro {
+            margin-bottom: 16px;
+        }
+
+        .workbench-intro h2 {
+            font-size: 1.32rem;
+        }
+
+        .app-shell > .card.shadow-sm .card-body,
+        #workbench .card-body {
+            padding-top: 20px;
+        }
+
+        .app-shell .border-bottom.mb-4 {
+            margin-bottom: 16px !important;
+        }
+
+        .consistency-panel {
+            padding: 12px 14px;
+        }
+
+        #mode-content-run > #run-area > .mb-3,
+        #mode-content-run > #run-area > .row {
+            margin-bottom: 14px !important;
+        }
+
+        @media (max-width: 1160px) {
+            .hero-brand-title {
+                font-size: 68px;
+            }
+
+            .hero-layout {
+                gap: 32px;
+            }
+        }
+
+        @media (max-width: 980px) {
+            .app-hero {
+                padding: 34px 20px 52px;
+            }
+
+            .hero-layout {
+                align-items: start;
+                gap: 30px;
+            }
+
+            .photo-pair {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .app-hero {
+                padding: 30px 16px 46px;
+            }
+
+            .hero-brand-title {
+                margin-top: 8px;
+                font-size: 52px;
+            }
+
+            .app-hero .hero-cn-title {
+                margin-top: 10px;
+                font-size: 26px;
+            }
+
+            .hero-lead {
+                font-size: 15.5px;
+            }
+
+            .hero-flow {
+                margin-top: 18px;
+            }
+
+            .hero-quick-panel {
+                padding: 18px 16px;
+            }
+
+            .track-empty {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .track-empty img {
+                max-width: 220px;
+                max-height: 78px;
+            }
+
+            .photo-pair .photo-upload-zone,
+            .photo-pair .preview-image {
+                min-height: 128px;
+            }
+        }
+
+        .icon-sprite {
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+        }
+
+        /* 首屏左栏的历史记录：跟随左栏宽度，别撑满整页 */
+        .hero-history {
+            max-width: 560px;
+            margin-top: 18px;
+        }
+
+        .hero-history .consistency-summary-action {
+            font-size: 13px;
+        }
+
+        /* 教程页也顺手收一收：原来每张参考图上下各 38px，四张就是一大段空白 */
+        .guide-shell {
+            padding-bottom: 24px;
+        }
+
+        .guide-hero {
+            padding: 14px 18px;
+        }
+
+        .guide-section {
+            margin-top: 22px;
+        }
+
+        .guide-step {
+            padding: 13px 15px;
+        }
+
+        .reference-shot {
+            gap: 22px;
+            padding-block: 20px;
+        }
+
+        .reference-strip-head {
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
@@ -4081,7 +4402,7 @@
             <nav class="topbar-nav" aria-label="页面快捷入口">
                 <button type="button" class="topbar-link" data-open-mode="guide">获取 Token</button>
                 <button type="button" class="topbar-link" data-open-mode="batch">批量记录</button>
-                <a class="topbar-link topbar-link-external" href="https://github.com/BuwusstseinEwigkeit/seu-run-assistant" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">项目主页 <span aria-hidden="true">↗</span></a>
+                <a class="topbar-link topbar-link-external" href="https://github.com/BewusstseinEwigkeit/seu-run-assistant" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">项目主页 <span aria-hidden="true">↗</span></a>
             </nav>
         </div>
 
@@ -4135,6 +4456,28 @@
                     </div>
                     <p id="token-bridge-status" class="token-bridge-status" role="status" aria-live="polite">使用顺序：① 双击 tools/token-tool/get-token.bat 并保持窗口运行；② 打开微信里的“东南大学体育管理 → 阳光跑”；③ 回到这里点击“从微信小程序提取 Token”。</p>
                     <p class="hero-network-note"><span aria-hidden="true">●</span> 网页不能替你启动 .bat；如果这里提示“无法连接本地桥接服务”，先确认黑色桥接窗口还开着，再点击提取。</p>
+
+                    <!-- 我的锻炼记录（只读，来自服务端）：放在首屏左栏，顺手填补右栏表单留下的空白 -->
+                    <details id="history-details" class="hero-history consistency-panel">
+                        <summary class="consistency-summary">
+                            <span>
+                                <strong><svg class="icon" aria-hidden="true"><use href="#i-checklist"></use></svg>我的锻炼记录</strong>
+                                <small id="history-summary-note">展开后读取服务端当月记录</small>
+                            </span>
+                            <span class="consistency-summary-action">展开记录 <span aria-hidden="true">⌄</span></span>
+                        </summary>
+                        <div class="consistency-panel-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label mb-0" for="history-month-picker">查询月份</label>
+                                <button type="button" id="btn-refresh-history" class="btn btn-outline-primary btn-sm">刷新</button>
+                            </div>
+                            <input type="month" id="history-month-picker" class="form-control form-control-sm">
+                            <ul id="history-record-list" class="consistency-list mt-3">
+                                <li class="text-muted">尚未加载</li>
+                            </ul>
+                            <small class="text-muted">只读展示，不影响提交。服务端同一天只计入一次，「有效」才计入锻炼次数。</small>
+                        </div>
+                    </details>
                 </div>
 
                 <section id="hero-quick-panel" class="hero-quick-panel" aria-labelledby="hero-panel-title">
@@ -4327,40 +4670,44 @@
                             <div class="row">
                                 <!-- 开始照片部分 -->
                                 <div class="col-md-6">
-                                    <div class="mb-3 photo-upload-card">
-                                        <label for="input-image_start" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg>上传开始照片</label>
-                                        <div class="photo-upload-zone" data-file-target="input-image_start" role="button" tabindex="0" aria-controls="input-image_start">
-                                            <input type="file" id="input-image_start" class="photo-file-input" accept="image/*">
-                                            <span class="photo-upload-icon" aria-hidden="true">↑</span>
-                                            <strong>点击这里选择开始照片</strong>
-                                            <small>也可以把图片拖到这里</small>
+                                    <div class="photo-pair">
+                                        <div class="photo-upload-card">
+                                            <label for="input-image_start" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg>上传开始照片</label>
+                                            <div class="photo-upload-zone" data-file-target="input-image_start" role="button" tabindex="0" aria-controls="input-image_start">
+                                                <input type="file" id="input-image_start" class="photo-file-input" accept="image/*">
+                                                <span class="photo-upload-icon" aria-hidden="true">↑</span>
+                                                <strong>点击选择开始照片</strong>
+                                                <small>也可以拖进来</small>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <!-- 在下面显示上传的图片 -->
-                                    <div class="mb-3">
-                                        <label class="form-label">开始照片预览</label>
-                                        <div id="preview-image_start" class="border p-2 preview-image" data-file-target="input-image_start" role="button" tabindex="0" aria-controls="input-image_start">
-                                            <span class="text-muted">尚未上传图片</span>
+                                        <!-- 在下面显示上传的图片 -->
+                                        <div class="photo-preview-card">
+                                            <label class="form-label">开始照片预览</label>
+                                            <div id="preview-image_start" class="border p-2 preview-image" data-file-target="input-image_start" role="button" tabindex="0" aria-controls="input-image_start">
+                                                <span class="text-muted">尚未上传图片</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- 结束照片部分 -->
                                 <div class="col-md-6">
-                                    <div class="mb-3 photo-upload-card">
-                                        <label for="input-image_end" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg>上传结束照片</label>
-                                        <div class="photo-upload-zone" data-file-target="input-image_end" role="button" tabindex="0" aria-controls="input-image_end">
-                                            <input type="file" id="input-image_end" class="photo-file-input" accept="image/*">
-                                            <span class="photo-upload-icon" aria-hidden="true">↑</span>
-                                            <strong>点击这里选择结束照片</strong>
-                                            <small>也可以把图片拖到这里</small>
+                                    <div class="photo-pair">
+                                        <div class="photo-upload-card">
+                                            <label for="input-image_end" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg>上传结束照片</label>
+                                            <div class="photo-upload-zone" data-file-target="input-image_end" role="button" tabindex="0" aria-controls="input-image_end">
+                                                <input type="file" id="input-image_end" class="photo-file-input" accept="image/*">
+                                                <span class="photo-upload-icon" aria-hidden="true">↑</span>
+                                                <strong>点击选择结束照片</strong>
+                                                <small>也可以拖进来</small>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <!-- 在下面显示上传的图片 -->
-                                    <div class="mb-3">
-                                        <label class="form-label">结束照片预览</label>
-                                        <div id="preview-image_end" class="border p-2 preview-image" data-file-target="input-image_end" role="button" tabindex="0" aria-controls="input-image_end">
-                                            <span class="text-muted">尚未上传图片</span>
+                                        <!-- 在下面显示上传的图片 -->
+                                        <div class="photo-preview-card">
+                                            <label class="form-label">结束照片预览</label>
+                                            <div id="preview-image_end" class="border p-2 preview-image" data-file-target="input-image_end" role="button" tabindex="0" aria-controls="input-image_end">
+                                                <span class="text-muted">尚未上传图片</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -4445,28 +4792,6 @@
                                 <ul id="consistency-check-results" class="consistency-list mt-3">
                                     <li class="text-muted">尚未检查</li>
                                 </ul>
-                                </div>
-                            </details>
-
-                            <!-- 我的锻炼记录（只读，来自服务端） -->
-                            <details id="history-details" class="mb-3 consistency-panel">
-                                <summary class="consistency-summary">
-                                    <span>
-                                        <strong><svg class="icon" aria-hidden="true"><use href="#i-checklist"></use></svg>我的锻炼记录</strong>
-                                        <small id="history-summary-note">展开后读取服务端当月记录</small>
-                                    </span>
-                                    <span class="consistency-summary-action">展开记录 <span aria-hidden="true">⌄</span></span>
-                                </summary>
-                                <div class="consistency-panel-body">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <label class="form-label mb-0" for="history-month-picker">查询月份</label>
-                                        <button type="button" id="btn-refresh-history" class="btn btn-outline-primary btn-sm">刷新</button>
-                                    </div>
-                                    <input type="month" id="history-month-picker" class="form-control form-control-sm">
-                                    <ul id="history-record-list" class="consistency-list mt-3">
-                                        <li class="text-muted">尚未加载</li>
-                                    </ul>
-                                    <small class="text-muted">只读展示，不影响提交。服务端同一天只计入一次，「有效」才计入锻炼次数。</small>
                                 </div>
                             </details>
 
@@ -4770,7 +5095,7 @@
     <!-- footer -->
     <footer class="footer mt-5 py-3 bg-light border-top">
         <div class="container text-center text-muted small">
-            <span><a href="https://github.com/BuwusstseinEwigkeit/seu-run-assistant" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">SEU Run Assistant</a> &copy; 2025 | GPLv3 LICENSE | BuwusstseinEwigkeit</span>
+            <span><a href="https://github.com/BewusstseinEwigkeit/seu-run-assistant" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">SEU Run Assistant</a> &copy; 2025 | GPLv3 LICENSE | BewusstseinEwigkeit</span>
         </div>
     </footer>
 

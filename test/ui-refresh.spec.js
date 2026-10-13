@@ -853,6 +853,50 @@ test('批量提交直接用预演好的方案，请求体与服务端规则对�
   await expect(page.locator('#batch-failed-list')).toContainText('暂无失败记录');
 });
 
+test('首屏标题在第一屏内，页面长度受控', async ({ page }) => {
+  await page.goto(PAGE_URL);
+
+  const layout = await page.evaluate(() => {
+    const box = (selector) => {
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      return { top: Math.round(rect.top + window.scrollY), bottom: Math.round(rect.bottom + window.scrollY) };
+    };
+    return {
+      title: box('.hero-brand-title'),
+      flow: box('.hero-flow'),
+      actions: box('.hero-actions'),
+      viewportHeight: window.innerHeight,
+      pageHeight: document.body.scrollHeight,
+      overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+    };
+  });
+
+  // hero 原来是 align-items:center，右侧表单卡很高，把标题顶到了折线以下
+  expect(layout.title.top).toBeLessThan(320);
+  expect(layout.title.bottom).toBeLessThan(layout.viewportHeight * 0.6);
+  expect(layout.flow.bottom).toBeLessThan(layout.viewportHeight);
+  expect(layout.actions.bottom).toBeLessThan(layout.viewportHeight);
+
+  // 页面长度：收紧前约 3800+，这里给一个上限当护栏
+  expect(layout.pageHeight).toBeLessThan(3400);
+  expect(layout.overflowX).toBe(false);
+
+  // 照片区：上传框与预览框并排成一行，不再上下各占一大块
+  const photo = await page.evaluate(() => {
+    const pair = document.querySelector('.photo-pair');
+    return {
+      columns: getComputedStyle(pair).gridTemplateColumns.split(' ').length,
+      height: Math.round(pair.getBoundingClientRect().height)
+    };
+  });
+  expect(photo.columns).toBe(2);
+  expect(photo.height).toBeLessThan(260);
+
+  // 我的锻炼记录挪到首屏左栏后仍然可用
+  await expect(page.locator('#history-details')).toBeVisible();
+  await expect(page.locator('#history-record-list')).toContainText('尚未加载');
+});
+
 test('固定配速、跑道内缩与手动引导点', async ({ page }) => {
   await page.goto(PAGE_URL);
   await mockBridgeApi(page);
