@@ -2,3 +2,9 @@
 .env
 test-results/
 node_modules/
+
+# 设计资料：原始大图与可重生成的截图不入库，仓库里放压缩版（design/*.webp）
+# 原始 PNG 仍留在本地，随时可以重新转码（design/transcode-assets.py）
+design/generated/*.png
+design/generated/originals/*.png
+design/refs/

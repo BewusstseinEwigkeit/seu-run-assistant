@@ -853,3 +853,113 @@ test('批量提交直接用预演好的方案，请求体与服务端规则对�
   await expect(page.locator('#batch-failed-list')).toContainText('暂无失败记录');
 });
 
+test('固定配速、跑道内缩与手动引导点', async ({ page }) => {
+  await page.goto(PAGE_URL);
+  await mockBridgeApi(page);
+  await page.route('https://worldtimeapi.org/**', (route) => route.abort());
+  await page.locator('#input-token').fill(`bearer ${TEST_JWT}`);
+  await page.locator('#tab-run').click();
+  await page.selectOption('#select-route_info', 'p1');
+
+  // 配速的可选区间由服务端规则算出：3'20'' ~ 10'00''
+  const paceUi = await page.evaluate(() => ({
+    min: Number(document.getElementById('input-pace').min),
+    max: Number(document.getElementById('input-pace').max),
+    minutes: Array.from(document.getElementById('input-pace-minute').options).map((o) => Number(o.value))
+  }));
+  expect(paceUi.min).toBe(200);
+  expect(paceUi.max).toBe(600);
+  expect(paceUi.minutes[0]).toBe(3);
+  expect(paceUi.minutes[paceUi.minutes.length - 1]).toBe(10);
+
+  // 用户自己挑 6 分 00 秒：时长必须等于 里程 × 该配速
+  await page.locator('#pace-random').uncheck();
+  await page.evaluate(() => {
+    const minute = document.getElementById('input-pace-minute');
+    const second = document.getElementById('input-pace-second');
+    minute.value = '6';
+    second.value = '0';
+    minute.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(await page.evaluate(() => window.ml_pace_seconds_for_plan())).toBe(360);
+
+  const generated = await page.evaluate(async () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const ymd = yesterday.getFullYear() + '-' + String(yesterday.getMonth() + 1).padStart(2, '0') + '-' +
+      String(yesterday.getDate()).padStart(2, '0');
+    const out = await window.ml_generate_time_and_track(ymd);
+    const polygon = window.ml_boundary_cache['p1'].paths;
+    const meta = window.ml_student_choose_route_data.metadata;
+    return {
+      durationSeconds: out.durationSeconds,
+      distanceKm: meta.totalDistance / 1000,
+      lapPerimeter: meta.lapPerimeterMeters,
+      inset: meta.trackInsetMeters,
+      clearance: meta.minClearanceMeters,
+      inside: out.track.every((point) => window.ml_isPointInPolygon(point.lat, point.lng, polygon))
+    };
+  });
+  // 时长 = 里程 × 配速（6'00''/km）
+  expect(Math.abs(generated.durationSeconds / generated.distanceKm - 360)).toBeLessThan(6);
+  // 自动内缩把单圈收到标准跑道的 400m 量级，而不是贴着限制范围跑
+  expect(generated.lapPerimeter).toBeGreaterThan(340);
+  expect(generated.lapPerimeter).toBeLessThan(460);
+  expect(generated.inset).toBeGreaterThan(3);
+  expect(generated.inside).toBe(true);
+  expect(generated.clearance).toBeGreaterThan(5);
+  expect(generated.distanceKm).toBeGreaterThanOrEqual(1.2);
+
+  // 手动引导点：勾选后在预览图上点 4 个点，轨迹就按点的路线走
+  await page.locator('#manual-guide').check();
+  await page.locator('#ml_Alert_Ok').click();
+  const guided = await page.evaluate(async () => {
+    const svg = document.getElementById('track-preview');
+    const box = svg.getBoundingClientRect();
+    const view = window.ml_current_track_view;
+    const scale = Math.min(box.width / view.vbW, box.height / view.vbH);
+    const offX = (box.width - view.vbW * scale) / 2;
+    const offY = (box.height - view.vbH * scale) / 2;
+    const boundary = window.ml_boundary_cache['p1'].paths;
+    const lats = boundary.map((p) => p.lat);
+    const lngs = boundary.map((p) => p.lng);
+    const midLat = (Math.min.apply(null, lats) + Math.max.apply(null, lats)) / 2;
+    const midLng = (Math.min.apply(null, lngs) + Math.max.apply(null, lngs)) / 2;
+    const latM = 111320;
+    const lngM = 111320 * Math.cos(midLat * Math.PI / 180);
+    [
+      { lat: midLat - 35 / latM, lng: midLng - 48 / lngM },
+      { lat: midLat - 35 / latM, lng: midLng + 48 / lngM },
+      { lat: midLat + 35 / latM, lng: midLng + 48 / lngM },
+      { lat: midLat + 35 / latM, lng: midLng - 48 / lngM }
+    ].forEach((point) => {
+      const c = window.ml_track_view_project(view, point);
+      svg.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientX: box.left + offX + c.x * scale,
+        clientY: box.top + offY + c.y * scale
+      }));
+    });
+    const target = new Date();
+    target.setDate(target.getDate() - 2);
+    const dateStr = target.getFullYear() + '-' + String(target.getMonth() + 1).padStart(2, '0') + '-' +
+      String(target.getDate()).padStart(2, '0');
+    const out = await window.ml_generate_time_and_track(dateStr);
+    const meta = window.ml_student_choose_route_data.metadata;
+    const maxOffsetM = Math.max.apply(null, out.track.map((p) => Math.abs(p.lat - midLat) * latM));
+    return {
+      waypoints: window.ml_active_waypoints().length,
+      guided: meta.guidedByWaypoints,
+      guidePoints: meta.guidePointCount,
+      maxOffsetM: maxOffsetM,
+      inside: out.track.every((p) => window.ml_isPointInPolygon(p.lat, p.lng, boundary))
+    };
+  });
+  expect(guided.waypoints).toBe(4);
+  expect(guided.guided).toBe(true);
+  expect(guided.guidePoints).toBe(4);
+  expect(guided.maxOffsetM).toBeLessThan(60);
+  expect(guided.inside).toBe(true);
+});
+
+

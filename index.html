@@ -5,6 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="no-referrer">
+    <meta name="theme-color" content="#F6F7F2">
+    <meta property="og:title" content="SEU Run Assistant">
+    <meta property="og:description" content="本地运行的锻炼记录助手：填 Token、生成时间与轨迹、提交记录。">
+    <meta property="og:image" content="assets/og-cover.jpg">
+    <meta name="twitter:card" content="summary_large_image">
     <title>SEU Run Assistant · 东大运动记录助手</title>
     <link rel="icon" type="image/png" href="assets/reference/seu-run-icon.png">
     <!-- The page ships with a small Bootstrap-compatible fallback below and does not depend on a third-party stylesheet at runtime. -->
@@ -404,6 +409,84 @@
 
         .check-fail {
             color: var(--red);
+        }
+
+        .pace-panel {
+            border: 1px solid #cfddf3;
+            background: linear-gradient(180deg, #f8fbff 0%, #f3f7fd 100%);
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+
+        .pace-value {
+            font-weight: 700;
+            color: #0f766e;
+            font-variant-numeric: tabular-nums;
+            font-size: 0.95rem;
+        }
+
+        .pace-part {
+            max-width: 108px;
+        }
+
+        .pace-unit {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        #track-preview.is-guiding {
+            cursor: crosshair;
+            outline: 2px dashed #2563eb;
+            outline-offset: 2px;
+        }
+
+        .track-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            padding: 16px;
+            border: 1px solid #cfddf3;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #f8fbff 0%, #f3f7fd 100%);
+            text-align: center;
+        }
+
+        .track-empty img {
+            width: 100%;
+            max-width: 420px;
+            max-height: 200px;
+            object-fit: contain;
+        }
+
+        .track-empty span {
+            color: #64748b;
+            font-size: 0.86rem;
+            line-height: 1.6;
+        }
+
+        /* 纸张颗粒：极低透明度铺一层，避免大片白底发“塑料感” */
+        body::after {
+            position: fixed;
+            inset: 0;
+            z-index: 2;
+            content: "";
+            background: url("assets/texture-paper.webp") center center / cover no-repeat;
+            opacity: 0.05;
+            mix-blend-mode: multiply;
+            pointer-events: none;
+        }
+
+        .icon {
+            width: 1.05em;
+            height: 1.05em;
+            margin-right: 0.34em;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vertical-align: -0.16em;
         }
 
         .guide-shell {
@@ -1418,7 +1501,7 @@
             background:
                 linear-gradient(90deg, rgba(255, 254, 249, 0.99) 0%, rgba(255, 254, 249, 0.95) 31%, rgba(255, 254, 249, 0.64) 47%, rgba(255, 254, 249, 0.08) 74%),
                 linear-gradient(180deg, rgba(255,255,255,0) 70%, rgba(239,246,243,0.58) 100%),
-                url("assets/light-campus-track-v1.webp") center center / cover no-repeat;
+                url("assets/hero-backdrop.webp") center center / cover no-repeat;
             box-shadow: none;
         }
 
@@ -2301,7 +2384,7 @@
                 background:
                     linear-gradient(90deg, rgba(255, 254, 249, 0.99) 0%, rgba(255, 254, 249, 0.94) 58%, rgba(255, 254, 249, 0.46) 100%),
                     linear-gradient(180deg, rgba(255,255,255,0.08), rgba(239,246,243,0.44)),
-                    url("assets/light-campus-track-v1.webp") 63% center / cover no-repeat;
+                    url("assets/hero-backdrop.webp") 63% center / cover no-repeat;
             }
 
             .hero-copy {
@@ -2574,7 +2657,7 @@
             background:
                 linear-gradient(90deg, rgba(255, 254, 249, 0.99) 0%, rgba(255, 254, 249, 0.93) 30%, rgba(255, 254, 249, 0.44) 58%, rgba(255, 254, 249, 0.10) 100%),
                 linear-gradient(180deg, rgba(255,255,255,0) 68%, rgba(239,246,243,0.38) 100%),
-                url("assets/light-campus-track-v1.webp") center center / cover no-repeat;
+                url("assets/hero-backdrop.webp") center center / cover no-repeat;
         }
 
         .app-hero::after {
@@ -3644,7 +3727,7 @@
                 padding-top: 66px;
                 background:
                     linear-gradient(90deg, rgba(255, 254, 249, 0.98), rgba(255, 254, 249, 0.76)),
-                    url("assets/light-campus-track-v1.webp") 56% center / cover no-repeat;
+                    url("assets/hero-backdrop.webp") 56% center / cover no-repeat;
             }
 
             .hero-layout {
@@ -3923,6 +4006,54 @@
     </style>
 </head>
 <body>
+    <!-- 图标精灵：线性图标统一 2px 描边、圆角端点，用 <svg class="icon"><use href="#i-key"></use></svg> 引用 -->
+    <svg class="icon-sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+        <symbol id="i-key" viewBox="0 0 24 24">
+            <circle cx="7.5" cy="16.5" r="3.5"></circle>
+            <path d="M10.1 13.9 19 5"></path>
+            <path d="M15.6 8.4 18 10.8"></path>
+            <path d="M17.9 6.1 20.3 8.5"></path>
+        </symbol>
+        <symbol id="i-pin" viewBox="0 0 24 24">
+            <path d="M12 21s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10Z"></path>
+            <circle cx="12" cy="11" r="2.4"></circle>
+        </symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8.5"></circle>
+            <path d="M12 7.4V12l3.2 2"></path>
+        </symbol>
+        <symbol id="i-stopwatch" viewBox="0 0 24 24">
+            <circle cx="12" cy="13.6" r="7"></circle>
+            <path d="M12 10.2v3.4l2.6 1.6"></path>
+            <path d="M9.6 3.4h4.8"></path>
+            <path d="M12 3.4v3"></path>
+            <path d="M18.3 7.3l1.4-1.4"></path>
+        </symbol>
+        <symbol id="i-gauge" viewBox="0 0 24 24">
+            <path d="M4 17.2a8.5 8.5 0 1 1 16 0"></path>
+            <path d="M12 17.2 16.4 12"></path>
+            <circle cx="12" cy="17.2" r="1.3"></circle>
+        </symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24">
+            <path d="M4 8.6h3l1.4-2h7.2l1.4 2h3v10.2H4z"></path>
+            <circle cx="12" cy="13.4" r="3.3"></circle>
+        </symbol>
+        <symbol id="i-checklist" viewBox="0 0 24 24">
+            <path d="M4.4 7.2 6 8.8l2.6-2.8"></path>
+            <path d="M11.4 7h8.6"></path>
+            <path d="M4.4 12.6 6 14.2l2.6-2.8"></path>
+            <path d="M11.4 12.4h8.6"></path>
+            <path d="M11.4 17.6h8.6"></path>
+        </symbol>
+        <symbol id="i-calendar" viewBox="0 0 24 24">
+            <rect x="4" y="6" width="16" height="14" rx="2.5"></rect>
+            <path d="M4 10.6h16"></path>
+            <path d="M9 4v3.2"></path>
+            <path d="M15 4v3.2"></path>
+            <path d="M8.4 14.4h2"></path>
+            <path d="M13.6 14.4h2"></path>
+        </symbol>
+    </svg>
     <!-- 警告对话框 -->
     <div class="overlay" id="overlay" aria-hidden="true"></div>
     <div class="custom-alert" id="ml_Alert_region" role="dialog" aria-modal="true" aria-labelledby="ml_Alert_Title" aria-describedby="ml_Alert_Message" tabindex="-1">
@@ -4017,7 +4148,7 @@
                     </div>
 
                     <div class="hero-field hero-field-full">
-                        <label for="input-token" class="form-label">Token</label>
+                        <label for="input-token" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-key"></use></svg>Token</label>
                         <div class="token-input-wrap">
                             <input type="password" id="input-token" class="form-control" placeholder="粘贴 Blade-Auth 的 bearer Token" autocomplete="off" spellcheck="false">
                             <button type="button" class="token-toggle" data-token-target="input-token" aria-pressed="false">显示</button>
@@ -4027,7 +4158,7 @@
                     </div>
 
                     <div class="hero-field hero-field-full">
-                        <label for="select-route_info" class="form-label">运动场地</label>
+                        <label for="select-route_info" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-pin"></use></svg>运动场地</label>
                         <select id="select-route_info" class="form-select">
                             <option value="" selected>填入 Token 后自动加载场地</option>
                         </select>
@@ -4035,11 +4166,11 @@
 
                     <div class="hero-panel-grid">
                         <div class="hero-field">
-                            <label for="exercise-start_time" class="form-label">开始时间</label>
+                            <label for="exercise-start_time" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg>开始时间</label>
                             <input type="datetime-local" id="exercise-start_time" class="form-control" step="1" value="">
                         </div>
                         <div class="hero-field">
-                            <label for="exercise-end_time" class="form-label">结束时间</label>
+                            <label for="exercise-end_time" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-stopwatch"></use></svg>结束时间</label>
                             <input type="datetime-local" id="exercise-end_time" class="form-control" step="1" value="">
                         </div>
                     </div>
@@ -4057,8 +4188,51 @@
                         </div>
                     </div>
 
+                    <div class="pace-panel mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label for="input-pace" class="form-label mb-0"><svg class="icon" aria-hidden="true"><use href="#i-gauge"></use></svg>配速（每公里用时）</label>
+                            <span id="pace-value-label" class="pace-value">5'30''/km</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <select id="input-pace-minute" class="form-select form-select-sm pace-part" aria-label="配速分钟"></select>
+                            <span class="pace-unit">分</span>
+                            <select id="input-pace-second" class="form-select form-select-sm pace-part" aria-label="配速秒数"></select>
+                            <span class="pace-unit">秒 / 公里</span>
+                        </div>
+                        <input type="range" id="input-pace" class="form-range" min="200" max="600" step="5" value="330">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="pace-random" checked>
+                            <label class="form-check-label" for="pace-random">随机配速（在规则允许的区间内，每天不一样）</label>
+                        </div>
+                        <small class="text-muted d-block mb-2" id="pace-hint">当前场地可选范围会在填入 Token 后更新。</small>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label for="input-track-inset" class="form-label mb-0">跑道内缩（米）</label>
+                            <span id="track-inset-label" class="pace-value">自动（按 400m 单圈向内收）</span>
+                        </div>
+                        <input type="number" id="input-track-inset" class="form-control form-control-sm" min="0" max="120" step="1" value="0">
+                        <small class="text-muted">限制范围是整个场地（围栏、看台一圈），跑道在里面。0 = 自动收到「单圈约 400m」的标准跑道位置，也可以手工填内缩米数。</small>
+                    </div>
+
+                    <div class="pace-panel mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" id="manual-guide">
+                                <label class="form-check-label" for="manual-guide">手动引导轨迹</label>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="button" id="btn-undo-waypoint" class="btn btn-outline-secondary btn-sm" disabled>撤销一个</button>
+                                <button type="button" id="btn-clear-waypoints" class="btn btn-outline-secondary btn-sm" disabled>清空</button>
+                            </div>
+                        </div>
+                        <small class="text-muted d-block" id="waypoint-list">还没有引导点：勾选「手动引导轨迹」后，在下面的图上依次点几个点，轨迹就按你点的路线跑。</small>
+                    </div>
+
                     <div class="hero-panel-tools">
                         <button type="button" id="btn-generate-all" class="btn btn-outline-primary btn-sm">一键生成时间+轨迹</button>
+                    </div>
+                    <div id="track-preview-empty" class="track-empty mb-3">
+                        <img src="assets/empty-track.webp" alt="" loading="lazy">
+                        <span>还没有生成轨迹。选好场地与配速后点「一键生成时间+轨迹」；也可以勾选下面的「手动引导轨迹」，直接在图上点出你要跑的那一圈。</span>
                     </div>
                     <div id="track-preview-wrap" class="mb-3" style="display: none;">
                         <svg id="track-preview" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="生成的跑步轨迹" style="width:100%;height:auto;max-height:300px;border:1px solid #e5e7eb;border-radius:12px;background:#f9fafb;"></svg>
@@ -4075,6 +4249,10 @@
                             <span class="consistency-summary-action">展开 <span aria-hidden="true">⌄</span></span>
                         </summary>
                         <div class="consistency-panel-body">
+                            <div class="visual-banner live-visual-banner mb-3" aria-hidden="true">
+                                <img src="assets/banner-live.webp" alt="" loading="lazy">
+                                <div class="visual-banner-copy"><span>LIVE RUN</span><strong>真实时间跑，轨迹一点点画出来</strong></div>
+                            </div>
                             <p class="guide-note">
                                 点「开始跑操」后页面会<strong>立刻</strong>上传开始记录（服务端记下的就是你的真实开始时间），
                                 然后你真的去跑；跑够规则要求再回来点「结束跑操」。
@@ -4088,6 +4266,10 @@
                             <div id="live-status" class="live-status" role="status" aria-live="polite">尚未开始</div>
                             <div class="progress mt-2" style="height: 22px; border-radius: 11px;">
                                 <div id="live-progress-bar" class="progress-bar" role="progressbar" style="width: 0%; font-size: 13px; line-height: 22px;">0%</div>
+                            </div>
+                            <div id="live-map-wrap" class="mt-3" style="display: none;">
+                                <svg id="live-track-preview" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="实时跑操轨迹" style="width:100%;height:auto;max-height:280px;border:1px solid #e5e7eb;border-radius:12px;background:#f9fafb;"></svg>
+                                <small id="live-track-meta" class="text-muted d-block mt-1">开始跑操后，这里会随真实时间一点点画出你的轨迹。</small>
                             </div>
                             <ul id="live-metrics" class="consistency-list mt-3">
                                 <li class="text-muted">开始后这里显示已跑时间、距离和配速</li>
@@ -4135,7 +4317,7 @@
 
                             <!-- 运动照片 -->
                             <div class="photo-guidance mb-3">
-                                <img src="assets/light-photo-workflow-v1.webp" alt="" loading="lazy">
+                                <img src="assets/banner-form.webp" alt="" loading="lazy">
                                 <div>
                                     <span class="section-eyebrow">PHOTO CHECK</span>
                                     <strong>开始和结束照片会在提交前分别预览</strong>
@@ -4146,7 +4328,7 @@
                                 <!-- 开始照片部分 -->
                                 <div class="col-md-6">
                                     <div class="mb-3 photo-upload-card">
-                                        <label for="input-image_start" class="form-label">上传开始照片</label>
+                                        <label for="input-image_start" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg>上传开始照片</label>
                                         <div class="photo-upload-zone" data-file-target="input-image_start" role="button" tabindex="0" aria-controls="input-image_start">
                                             <input type="file" id="input-image_start" class="photo-file-input" accept="image/*">
                                             <span class="photo-upload-icon" aria-hidden="true">↑</span>
@@ -4166,7 +4348,7 @@
                                 <!-- 结束照片部分 -->
                                 <div class="col-md-6">
                                     <div class="mb-3 photo-upload-card">
-                                        <label for="input-image_end" class="form-label">上传结束照片</label>
+                                        <label for="input-image_end" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg>上传结束照片</label>
                                         <div class="photo-upload-zone" data-file-target="input-image_end" role="button" tabindex="0" aria-controls="input-image_end">
                                             <input type="file" id="input-image_end" class="photo-file-input" accept="image/*">
                                             <span class="photo-upload-icon" aria-hidden="true">↑</span>
@@ -4270,7 +4452,7 @@
                             <details id="history-details" class="mb-3 consistency-panel">
                                 <summary class="consistency-summary">
                                     <span>
-                                        <strong>我的锻炼记录</strong>
+                                        <strong><svg class="icon" aria-hidden="true"><use href="#i-checklist"></use></svg>我的锻炼记录</strong>
                                         <small id="history-summary-note">展开后读取服务端当月记录</small>
                                     </span>
                                     <span class="consistency-summary-action">展开记录 <span aria-hidden="true">⌄</span></span>
@@ -4453,11 +4635,11 @@
                                 <span id="token-validation-message-batch" class="text-danger" style="display: none;">❌ Token 不符合规范</span>
                             </div>
                             <div class="visual-banner batch-visual-banner" aria-hidden="true">
-                                <img src="assets/light-photo-workflow-v1.webp" alt="" loading="lazy">
+                                <img src="assets/banner-batch.webp" alt="" loading="lazy">
                                 <div class="visual-banner-copy"><span>BATCH WORKFLOW</span><strong>先核对日期与照片，再开始批量记录</strong></div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">日期范围</label>
+                                <label class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg>日期范围</label>
                                 <div class="row">
                                     <div class="col-md-6">
                                         <label for="batch-start-date" class="form-label">开始日期</label>
@@ -4474,7 +4656,7 @@
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label for="select-route_info-batch" class="form-label">场地选择</label>
+                                <label for="select-route_info-batch" class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-pin"></use></svg>场地选择</label>
                                 <select id="select-route_info-batch" class="form-select">
                                     <option value="403640128840458727">小营田径场 (四牌楼校区)</option>
                                     <option value="403640128840458521">四牌楼体育场 (四牌楼校区)</option>
@@ -4490,15 +4672,38 @@
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">时间设置</label>
+                                <label class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg>时间设置</label>
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="batch-random-time" checked>
                                     <label class="form-check-label" for="batch-random-time">自动生成随机时间（按服务端规则推导，与轨迹里程、配速自洽）</label>
                                 </div>
                                 <small class="text-muted">取消勾选后每天固定从 07:00 开始，时长仍取自当天的轨迹。</small>
                             </div>
+                            <div class="pace-panel mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label for="input-pace-batch" class="form-label mb-0"><svg class="icon" aria-hidden="true"><use href="#i-gauge"></use></svg>配速（与「单次提交」共用）</label>
+                                    <span id="pace-value-label-batch" class="pace-value">5'30''/km</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <select id="input-pace-minute-batch" class="form-select form-select-sm pace-part" aria-label="配速分钟"></select>
+                                    <span class="pace-unit">分</span>
+                                    <select id="input-pace-second-batch" class="form-select form-select-sm pace-part" aria-label="配速秒数"></select>
+                                    <span class="pace-unit">秒 / 公里</span>
+                                </div>
+                                <input type="range" id="input-pace-batch" class="form-range" min="200" max="600" step="5" value="330">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="pace-random-batch" checked>
+                                    <label class="form-check-label" for="pace-random-batch">随机配速（每天在规则区间里随机）</label>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <label for="input-track-inset-batch" class="form-label mb-0"><svg class="icon" aria-hidden="true"><use href="#i-gauge"></use></svg>跑道内缩（米）</label>
+                                    <span id="track-inset-label-batch" class="pace-value">自动（按 400m 单圈向内收）</span>
+                                </div>
+                                <input type="number" id="input-track-inset-batch" class="form-control form-control-sm" min="0" max="120" step="1" value="0">
+                                <small class="text-muted">与「单次提交」共用：0 = 自动按 400m 单圈向内收，轨迹不会压到限制范围边缘；手动引导点同样对批量生效。</small>
+                            </div>
                             <div class="mb-3">
-                                <label class="form-label">照片池（多张照片按明暗度匹配当天时段抽取，每天不同）</label>
+                                <label class="form-label"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg>照片池（多张照片按明暗度匹配当天时段抽取，每天不同）</label>
                                 <div class="row">
                                     <div class="col-md-6">
                                         <label for="batch-image_start-pool" class="form-label">开始照片（支持多张）</label>
@@ -4514,7 +4719,7 @@
                             </div>
                             <div class="mb-3">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label class="form-label mb-0">轨迹预演（一次性生成全部轨迹）</label>
+                                    <label class="form-label mb-0"><svg class="icon" aria-hidden="true"><use href="#i-checklist"></use></svg>轨迹预演（一次性生成全部轨迹）</label>
                                     <button type="button" id="btn-generate-batch-plans" class="btn btn-outline-primary btn-sm">🎲 一次性生成全部轨迹</button>
                                 </div>
                                 <div id="batch-plan-summary" class="text-muted small">还没有生成。可以先点上面的按钮生成并核对，也可以直接「开始批量提交」，提交前会自动先生成。</div>
@@ -7300,16 +7505,11 @@
             };
         }
 
-function ml_distanceToPolygon(lat, lng, polygon) {
-            var minDist = Infinity;
-            var n = polygon.length;
-            for (var i = 0; i < n; i++) {
-                var j = (i + 1) % n;
-                var p1 = polygon[i], p2 = polygon[j];
-                var dist = ml_distanceToSegment(lat, lng, p1.lat, p1.lng, p2.lat, p2.lng);
-                if (dist < minDist) minDist = dist;
-            }
-            return minDist;
+        function ml_distanceToPolygon(lat, lng, polygon) {
+            // 用米制平面算：原先在经纬度上混用 lat/lng 当 x/y，算出来是天文数字
+            var scale = ml_centerScaleForPolygon(polygon);
+            var polygonXY = ml_projectPolygonXY(polygon, scale.latMeters, scale.lngMeters);
+            return ml_distanceToPolygonXY(lng * scale.lngMeters, lat * scale.latMeters, polygonXY);
         }
 
         function ml_distanceToSegment(px, py, x1, y1, x2, y2) {
@@ -7431,15 +7631,341 @@ function ml_distanceToPolygon(lat, lng, polygon) {
     "橘园田径场": {"paths": [{lat:31.882039875957734,lng:118.81461408311532}, {lat:31.882049257364493,lng:118.81490912436834}, {lat:31.882078878746217,lng:118.81503822562968}, {lat:31.882104328015565,lng:118.8151947043068}, {lat:31.882111387387518,lng:118.81536493085946}, {lat:31.88211297976667,lng:118.81552091236756}, {lat:31.882093220075536,lng:118.81570557681368}, {lat:31.881832508053783,lng:118.81572932160975}, {lat:31.881304966800094,lng:118.8157734227915}, {lat:31.881054038564347,lng:118.81578865812128}, {lat:31.880785582754434,lng:118.81580730423332}, {lat:31.880500099905696,lng:118.81582957104365}, {lat:31.88047124173211,lng:118.81564187051595}, {lat:31.88044401949469,lng:118.8153890688344}, {lat:31.88042486337312,lng:118.81519976052982}, {lat:31.88041532518613,lng:118.81508394000207}, {lat:31.880414105784673,lng:118.81497139945122}, {lat:31.880388337123918,lng:118.81472368828122}]},
 };
 
+        // 按弧长在闭合路径上取点（用于"沿跑道跑固定距离"）
+        function ml_closedPathWalker(path) {
+            var n = path.length;
+            var cum = [0];
+            for (var i = 0; i < n; i++) {
+                var j = (i + 1) % n;
+                cum.push(cum[i] + ml_haversineDistance(path[i].lat, path[i].lng, path[j].lat, path[j].lng));
+            }
+            var total = cum[n];
+            return {
+                total: total,
+                at: function(distM) {
+                    if (!(total > 0)) { return { lat: path[0].lat, lng: path[0].lng }; }
+                    var d = ((distM % total) + total) % total;
+                    var lo = 0, hi = n;
+                    while (lo < hi - 1) {
+                        var mid = (lo + hi) >> 1;
+                        if (cum[mid] <= d) { lo = mid; } else { hi = mid; }
+                    }
+                    var a = path[lo], b = path[(lo + 1) % n];
+                    var segLen = cum[lo + 1] - cum[lo];
+                    var t = segLen > 0 ? (d - cum[lo]) / segLen : 0;
+                    return { lat: a.lat + t * (b.lat - a.lat), lng: a.lng + t * (b.lng - a.lng) };
+                }
+            };
+        }
+
+        /*
+        ML Remark: 米制平面工具
+        跑道几何要反复做"点到边界距离"和"多边形内缩"，直接用经纬度 + haversine 太慢
+        （批量几十天会把求解跑成几十秒）。所以在场地中心纬度上做一次局部等距投影，
+        全部几何在米制平面上算，最后再转回经纬度。200m 尺度上投影误差 < 0.1%。
+        */
+        function ml_projectPolygonXY(polygon, latMeters, lngMeters) {
+            return polygon.map(function(p) { return { x: p.lng * lngMeters, y: p.lat * latMeters }; });
+        }
+
+        function ml_unprojectPoint(pt, latMeters, lngMeters) {
+            return { lat: pt.y / latMeters, lng: pt.x / lngMeters };
+        }
+
+        function ml_centerScaleForPolygon(polygon) {
+            var center = ml_polygonCentroid(polygon);
+            return {
+                center: center,
+                latMeters: 111320,
+                lngMeters: 111320 * Math.cos(center.lat * Math.PI / 180)
+            };
+        }
+
+        function ml_pointInPolygonXY(x, y, polygonXY) {
+            var inside = false;
+            var n = polygonXY.length;
+            for (var i = 0, j = n - 1; i < n; j = i++) {
+                var xi = polygonXY[i].x, yi = polygonXY[i].y;
+                var xj = polygonXY[j].x, yj = polygonXY[j].y;
+                if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        }
+
+        function ml_distanceToSegmentXY(px, py, x1, y1, x2, y2) {
+            var dx = x2 - x1, dy = y2 - y1;
+            var len2 = dx * dx + dy * dy;
+            var t = len2 > 0 ? Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2)) : 0;
+            var nx = x1 + t * dx, ny = y1 + t * dy;
+            return Math.sqrt((px - nx) * (px - nx) + (py - ny) * (py - ny));
+        }
+
+        function ml_distanceToPolygonXY(x, y, polygonXY) {
+            var minDist = Infinity;
+            var n = polygonXY.length;
+            for (var i = 0; i < n; i++) {
+                var j = (i + 1) % n;
+                var d = ml_distanceToSegmentXY(x, y, polygonXY[i].x, polygonXY[i].y, polygonXY[j].x, polygonXY[j].y);
+                if (d < minDist) { minDist = d; }
+            }
+            return minDist;
+        }
+
+        function ml_centroidXY(polygonXY) {
+            var x = 0, y = 0;
+            for (var i = 0; i < polygonXY.length; i++) { x += polygonXY[i].x; y += polygonXY[i].y; }
+            return { x: x / polygonXY.length, y: y / polygonXY.length };
+        }
+
+        function ml_closedLengthXY(pathXY) {
+            var total = 0;
+            for (var i = 0; i < pathXY.length; i++) {
+                var a = pathXY[i], b = pathXY[(i + 1) % pathXY.length];
+                total += Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+            }
+            return total;
+        }
+
+        // 与 ml_roundPolygon 同一套贝塞尔圆角算法，只是在米制平面上做
+        function ml_roundPolygonXY(polygonXY, radiusMeters) {
+            var n = polygonXY.length;
+            if (n < 3) { return polygonXY.slice(); }
+            var steps = Math.max(5, Math.min(24, Math.round(radiusMeters / 3)));
+            var out = [];
+            for (var i = 0; i < n; i++) {
+                var A = polygonXY[(i - 1 + n) % n], B = polygonXY[i], C = polygonXY[(i + 1) % n];
+                var BAx = A.x - B.x, BAy = A.y - B.y;
+                var BCx = C.x - B.x, BCy = C.y - B.y;
+                var lenBA = Math.sqrt(BAx * BAx + BAy * BAy) || 1;
+                var lenBC = Math.sqrt(BCx * BCx + BCy * BCy) || 1;
+                var r = Math.min(radiusMeters, lenBA * 0.45, lenBC * 0.45);
+                var p1x = B.x + BAx / lenBA * r, p1y = B.y + BAy / lenBA * r;
+                var p2x = B.x + BCx / lenBC * r, p2y = B.y + BCy / lenBC * r;
+                for (var s = 0; s <= steps; s++) {
+                    var t = s / steps, mt = 1 - t;
+                    out.push({
+                        x: mt * mt * p1x + 2 * mt * t * B.x + t * t * p2x,
+                        y: mt * mt * p1y + 2 * mt * t * B.y + t * t * p2y
+                    });
+                }
+            }
+            return out;
+        }
+
+        // 把某个点朝中心收，直到"到原边界的距离 >= distanceM 且仍在多边形内"（米制平面）
+        function ml_shrinkPointInwardXY(pointXY, polygonXY, centerXY, distanceM) {
+            if (!(distanceM > 0)) { return { x: pointXY.x, y: pointXY.y }; }
+            if (ml_pointInPolygonXY(pointXY.x, pointXY.y, polygonXY) &&
+                ml_distanceToPolygonXY(pointXY.x, pointXY.y, polygonXY) >= distanceM) {
+                return { x: pointXY.x, y: pointXY.y };
+            }
+            var lo = 0, hi = 1;
+            for (var it = 0; it < 20; it++) {
+                var mid = (lo + hi) / 2;
+                var x = pointXY.x + (centerXY.x - pointXY.x) * mid;
+                var y = pointXY.y + (centerXY.y - pointXY.y) * mid;
+                if (ml_pointInPolygonXY(x, y, polygonXY) &&
+                    ml_distanceToPolygonXY(x, y, polygonXY) >= distanceM) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            return {
+                x: pointXY.x + (centerXY.x - pointXY.x) * hi,
+                y: pointXY.y + (centerXY.y - pointXY.y) * hi
+            };
+        }
+
+        // 把某个点朝中心收，直到"到原边界的距离 >= distanceM 且仍在多边形内"
+        function ml_shrinkPointInward(point, polygon, center, distanceM) {
+            if (!(distanceM > 0)) { return { lat: point.lat, lng: point.lng }; }
+            var scale = ml_centerScaleForPolygon(polygon);
+            var polygonXY = ml_projectPolygonXY(polygon, scale.latMeters, scale.lngMeters);
+            var shrunk = ml_shrinkPointInwardXY(
+                { x: point.lng * scale.lngMeters, y: point.lat * scale.latMeters },
+                polygonXY, ml_centroidXY(polygonXY), distanceM);
+            return ml_unprojectPoint(shrunk, scale.latMeters, scale.lngMeters);
+        }
+
+        /*
+        ML Remark: 把限制范围向内收成"跑道"
+        服务端下发的 latlngs 是整块场地的限制范围（围栏、看台、草皮一圈），真正能跑的
+        是里面那条 400m 标准跑道，两者并不重合——实测这些多边形周长 500~600m，而标准
+        田径场最外道约 460m、第一道实跑线正好 400m。贴着限制范围跑，轨迹会压在围栏、
+        看台上，看起来就不像在跑道上跑。所以这里把边界向内收，收到的那条闭合线就是
+        跑道实跑线的位置（默认按"单圈 ≈ 400m"自动求解，也可以手工指定内缩米数）。
+        */
+        // 多边形整体内缩（顶点 + 两轮边中点细分），保证每条边上离原边界都不少于 distanceM
+        function ml_shrinkPolygonInwardXY(polygonXY, distanceM, centerXY) {
+            if (!(distanceM > 0)) { return polygonXY.map(function(p) { return { x: p.x, y: p.y }; }); }
+            var out = polygonXY.map(function(p) {
+                return ml_shrinkPointInwardXY(p, polygonXY, centerXY, distanceM);
+            });
+            for (var round = 0; round < 2; round++) {
+                var next = [];
+                for (var i = 0; i < out.length; i++) {
+                    var a = out[i];
+                    var b = out[(i + 1) % out.length];
+                    next.push(a);
+                    next.push(ml_shrinkPointInwardXY(
+                        { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, polygonXY, centerXY, distanceM));
+                }
+                out = next;
+            }
+            return out;
+        }
+
+        function ml_shrinkPolygonInward(polygon, distanceM, center) {
+            var scale = ml_centerScaleForPolygon(polygon);
+            var polygonXY = ml_projectPolygonXY(polygon, scale.latMeters, scale.lngMeters);
+            var centerXY = center
+                ? { x: center.lng * scale.lngMeters, y: center.lat * scale.latMeters }
+                : ml_centroidXY(polygonXY);
+            var shrunk = ml_shrinkPolygonInwardXY(polygonXY, distanceM, centerXY);
+            return shrunk.map(function(p) { return ml_unprojectPoint(p, scale.latMeters, scale.lngMeters); });
+        }
+
+        // 内缩之后的单圈长度：圆角化后在米制平面上量周长（与最终轨迹是同一条形状）
+        function ml_lap_perimeter_for_inset(polygon, distanceM) {
+            var scale = ml_centerScaleForPolygon(polygon);
+            var polygonXY = ml_projectPolygonXY(polygon, scale.latMeters, scale.lngMeters);
+            var centerXY = ml_centroidXY(polygonXY);
+            var out = ml_shrinkPolygonInwardXY(polygonXY, distanceM, centerXY);
+            var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            out.forEach(function(p) {
+                minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+            });
+            var radiusM = Math.min(Math.min(maxX - minX, maxY - minY) / 2, 45);
+            return ml_closedLengthXY(ml_roundPolygonXY(out, radiusM));
+        }
+
+        // 标准田径场第一道实跑线：400m 一圈
+        function ml_target_lap_meters() { return 400; }
+
+        // 二分求内缩量，让单圈长度落在目标附近
+        function ml_solve_track_inset(polygon, shortSideM, targetLapM) {
+            var maxInset = Math.max(0, Math.min(shortSideM / 2 - 25, 60));
+            if (maxInset <= 0) { return 0; }
+            if (ml_lap_perimeter_for_inset(polygon, 0) <= targetLapM) {
+                return 0;   // 场地本来就不大，不用收
+            }
+            if (ml_lap_perimeter_for_inset(polygon, maxInset) >= targetLapM) {
+                return maxInset;
+            }
+            var lo = 0, hi = maxInset;
+            for (var it = 0; it < 12; it++) {
+                var mid = (lo + hi) / 2;
+                if (ml_lap_perimeter_for_inset(polygon, mid) > targetLapM) {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            return hi;
+        }
+
+        /*
+        ML Remark: 可选配速区间
+        用户自己选配速时，不是随便报一个数都能成立：
+          1. 服务端规则本身给了 minPace / maxPace（本部署是 3'20'' ~ 10'00''）
+          2. 配速还受"里程不低于标准里程 + 时长落在 [minTime, maxTime]"约束：
+             太慢 → 标准里程跑完就超过 maxTime 了；太快 → 跑到 1.5 倍标准里程也不够 minTime
+        两者取交集，就是滑块能选的范围。
+        */
+        function ml_pace_bounds(route) {
+            route = route || ml_choose_route_data || {};
+            var ruleMin = Number(route.min_pace) || 3.3333;
+            var ruleMax = Number(route.max_pace) || 10;
+            var standardKm = Number(route.route_distance_km) || 1.2;
+            var minTimeMin = Number(route.min_time) || 4;
+            var maxTimeMin = Number(route.max_time) || 12;
+            var maxDistanceKm = standardKm * 1.5;
+            var upper = Math.min(ruleMax, maxTimeMin / standardKm);
+            var lower = Math.max(ruleMin, minTimeMin / maxDistanceKm);
+            if (lower > upper) { lower = upper; }
+            return { lower: lower, upper: upper, standardKm: standardKm, maxDistanceKm: maxDistanceKm };
+        }
+
         // boundary 可以是服务端 listRule 的场地多边形对象，也可以是内置的场地名
+        /*
+        ML Remark: 轨迹生成（跑道圈 + 按距离取点）
+        与旧实现的三个区别：
+          1. 不再贴着限制范围跑。服务端下发的多边形是整块场地（围栏/看台一圈），
+             真正能跑的是里面那条 400m 跑道；先把边界按"单圈 ≈ 400m"向内收成跑道
+             实跑线（ml_solve_track_inset），落点离限制范围始终留有余量
+          2. 不再用"圈数向上取整"凑距离。一圈 600m 时目标 1.2km 会被跑成 1.8km，
+             里程和配速全对不上；改成沿跑道按弧长逐点前进，整圈 + 最后一圈按剩余
+             距离截断，里程误差 < 1%
+          3. 距离按开放路径计算。跑完最后一圈就停在原地，不会凭空多出一条
+             "从终点回到起点"的直线
+        */
+        var ml_lap_geometry_cache = {};
+
+        // 同一场地的跑道几何只解一次：批量几十天共用一个场地，不必每天重算
+        function ml_lap_geometry_for(polygon, requestedInsetMeters, waypoints) {
+            var bounds = ml_polygonBounds(polygon);
+            var center = ml_polygonCentroid(polygon);
+            var latMeters = 111320;
+            var lngMeters = 111320 * Math.cos(center.lat * Math.PI / 180);
+            var widthM = (bounds.maxLng - bounds.minLng) * lngMeters;
+            var heightM = (bounds.maxLat - bounds.minLat) * latMeters;
+            var shortSideM = Math.min(widthM, heightM);
+
+            // 手动引导点 ≥ 3 个时，用户点的路线就是跑道，不再自动内缩
+            var guide = (waypoints && waypoints.length >= 3) ? waypoints : null;
+            var requested = Number(requestedInsetMeters);
+            var autoInset = !guide && !(isFinite(requested) && requested > 0);
+            var cacheKey = polygon.length + '|' + polygon[0].lat.toFixed(6) + ',' + polygon[0].lng.toFixed(6) +
+                '|' + (guide ? ('guide:' + ml_waypoints_signature())
+                             : (autoInset ? 'auto' : requested.toFixed(1)));
+            if (ml_lap_geometry_cache[cacheKey]) { return ml_lap_geometry_cache[cacheKey]; }
+
+            var insetM = 0;
+            var lapSource;
+            if (guide) {
+                lapSource = guide.map(function(p) { return { lat: p.lat, lng: p.lng }; });
+            } else {
+                insetM = autoInset
+                    ? ml_solve_track_inset(polygon, shortSideM, ml_target_lap_meters())
+                    : Math.min(requested, Math.max(0, shortSideM / 2 - 25));
+                lapSource = ml_shrinkPolygonInward(polygon, insetM, center);
+            }
+            var innerBounds = ml_polygonBounds(lapSource);
+            var innerCenter = ml_polygonCentroid(lapSource);
+            var innerWidthM = (innerBounds.maxLng - innerBounds.minLng) * lngMeters;
+            var innerHeightM = (innerBounds.maxLat - innerBounds.minLat) * latMeters;
+            var cornerRadiusM = Math.min(Math.min(innerWidthM, innerHeightM) / 2, 45);
+            var lapPath = ml_resampleClosedPath(
+                ml_roundPolygon(lapSource, cornerRadiusM, latMeters, lngMeters), 6);
+            var walker = ml_closedPathWalker(lapPath);
+            var geometry = {
+                insetMeters: insetM,
+                insetIsAuto: autoInset,
+                guided: !!guide,
+                guideCount: guide ? guide.length : 0,
+                lapPath: lapPath,
+                walker: walker,
+                lapPerimeter: walker.total,
+                innerCenter: innerCenter,
+                innerWidthM: innerWidthM,
+                innerHeightM: innerHeightM,
+                targetLapMeters: ml_target_lap_meters()
+            };
+            ml_lap_geometry_cache[cacheKey] = geometry;
+            return geometry;
+        }
+
         async function ml_generateRandomTrack(boundary, options) {
             options = options || {};
-            var noiseLevel = options.noiseLevel || (0.000010 + Math.random() * 0.000015);
 
-            // 目标距离由调用方按规则推导（时间/配速/里程要对齐）；未提供时回退到随机策略
+            // 目标距离由调用方按规则/配速推导；未提供时回退到随机策略
             var paceSecondsPerKm = Number(options.paceSecondsPerKm);
             if (!isFinite(paceSecondsPerKm) || paceSecondsPerKm <= 0) {
-                paceSecondsPerKm = 210 + Math.random() * 300; // 回退：3'30''~8'30''/km
+                paceSecondsPerKm = 210 + Math.random() * 300;
             }
             var targetDistanceM = Number(options.targetDistanceM);
             if (!isFinite(targetDistanceM) || targetDistanceM <= 0) {
@@ -7460,192 +7986,108 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             }
             if (!polygon || polygon.length < 3) throw new Error("场地边界无效");
 
-            // ---- 核心策略: 沿场地边界的平滑跑道跑圈 ----
-            // 服务端的 latlngs 只有 4-6 个粗角点，直接连线是折线。这里先对多边形做
-            // 圆角化：每个角点用二次贝塞尔过渡，得到贴合场地实际形状的平滑闭合路径。
-            // 矩形场地会自然生成「两个直道 + 两个半圆弧」的标准田径场形状，
-            // 比硬塞一个椭圆更符合地形。
-            var bounds = ml_polygonBounds(polygon);
-            var polyCenter = {
-                lat: (bounds.minLat + bounds.maxLat) / 2,
-                lng: (bounds.minLng + bounds.maxLng) / 2
-            };
-            var latMeters = 111320;
-            var lngMeters = 111320 * Math.cos(polyCenter.lat * Math.PI / 180);
-            var widthM = (bounds.maxLng - bounds.minLng) * lngMeters;
-            var heightM = (bounds.maxLat - bounds.minLat) * latMeters;
-            // 弯道半径取短边的一半，但不超过 45m（真实田径场弯道约 36m 量级）
-            var cornerRadiusM = Math.min(Math.min(widthM, heightM) / 2, 45);
-            // 圆角化后按 6m 间距重采样，让整圈点分布均匀（直道段也要有点）
-            var lapPath = ml_resampleClosedPath(
-                ml_roundPolygon(polygon, cornerRadiusM, latMeters, lngMeters), 6);
+            var polyCenter = ml_polygonCentroid(polygon);
+            // 1) 跑道几何（内缩 + 圆角化 + 重采样成一圈）
+            var geometry = ml_lap_geometry_for(polygon, options.insetMeters, options.waypoints);
+            var walker = geometry.walker;
+            var lapPerimeter = geometry.lapPerimeter;
+            if (!(lapPerimeter > 20)) { throw new Error("场地太小，生成不了跑道"); }
 
-            // 单圈周长
-            var lapPerimeter = 0;
-            for (var i = 0; i < lapPath.length; i++) {
-                var j = (i + 1) % lapPath.length;
-                lapPerimeter += ml_haversineDistance(lapPath[i].lat, lapPath[i].lng, lapPath[j].lat, lapPath[j].lng);
-            }
-
-            // 每圈采样点数(间距约 6m)；圈数 = 目标距离 / 每圈周长
-            var ptsPerLap = Math.max(30, Math.round(lapPerimeter / 6));
-            var numLaps = Math.max(1, Math.ceil(targetDistanceM / lapPerimeter));
-            numLaps = Math.min(numLaps, 8); // 最多 8 圈
-
-            // 生成轨迹：沿平滑跑道跑 numLaps 圈。每圈缩放与起点略有差异，
-            // 模拟人每圈路线不会完全重合；逐点独立抖动会让轨迹变锯齿，不加。
+            // 2) 沿跑道按弧长取点：整圈 + 最后一圈按剩余距离截断。
+            //    注意累计的是"实测点距"而不是"期望弧长"：每圈会向内换线 1~3%，
+            //    按期望弧长记账会让实际里程短于目标（甚至低于标准里程）。
+            var laneRadiusM = Math.max(1, Math.min(geometry.innerWidthM, geometry.innerHeightM) / 2);
             var track = [];
-            for (var lap = 0; lap < numLaps; lap++) {
-                var lapScale = 0.97 + Math.random() * 0.05;   // 每圈缩放 0.97~1.02
-                var lapOffset = Math.random() * 0.12;         // 每圈起点偏移
-                for (var p = 0; p < ptsPerLap; p++) {
-                    var src = lapPath[(p + Math.round(lapOffset * ptsPerLap)) % lapPath.length];
-                    var lat = polyCenter.lat + (src.lat - polyCenter.lat) * lapScale;
-                    var lng = polyCenter.lng + (src.lng - polyCenter.lng) * lapScale;
-                    // 边界验证：圆角化在凸角内收，但凹多边形仍可能外溢
-                    if (!ml_isPointInPolygon(lat, lng, polygon)) {
-                        var clamped = ml_movePointInsidePolygon(lat, lng, polygon, polyCenter);
-                        lat = clamped.lat;
-                        lng = clamped.lng;
+            var measuredM = 0;
+            var cursorM = Math.random() * lapPerimeter;   // 起点落在跑道上的随机位置
+            var maxPoints = 600;
+            var stepM = 6;
+            while (measuredM < targetDistanceM && track.length < maxPoints) {
+                // 每圈在跑道内微调 0~3m（只往里收），模拟人不会每圈压在同一条线上
+                var laneScale = 1 - (Math.random() * 3) / laneRadiusM;
+                var remainingM = targetDistanceM - measuredM;
+                var lapLen = Math.min(lapPerimeter, remainingM + stepM);
+                var walkedM = 0;
+                while (walkedM < lapLen - 0.5 && measuredM < targetDistanceM && track.length < maxPoints) {
+                    var raw = walker.at(cursorM + walkedM);
+                    var lat = geometry.innerCenter.lat + (raw.lat - geometry.innerCenter.lat) * laneScale;
+                    var lng = geometry.innerCenter.lng + (raw.lng - geometry.innerCenter.lng) * laneScale;
+                    if (track.length > 0) {
+                        var prev = track[track.length - 1];
+                        measuredM += ml_haversineDistance(prev.lat, prev.lng, lat, lng);
                     }
                     track.push({ lat: lat, lng: lng, sortNum: track.length + 1 });
+                    walkedM += stepM;
                 }
+                cursorM = (cursorM + walkedM) % lapPerimeter;
             }
+            var lapCount = Math.round((measuredM / lapPerimeter) * 100) / 100;
 
-            // 计算实际距离
-            var actualDist = 0;
-            for (var i = 0; i < track.length - 1; i++) {
-                actualDist += ml_haversineDistance(track[i].lat, track[i].lng, track[i+1].lat, track[i+1].lng);
-            }
-            actualDist += ml_haversineDistance(track[track.length-1].lat, track[track.length-1].lng, track[0].lat, track[0].lng);
-
-            // 如果实际距离超过目标太多，适当向内收缩
-            if (actualDist > targetDistanceM * 1.2) {
-                var shrinkScale = targetDistanceM / actualDist;
-                for (var i = 0; i < track.length; i++) {
-                    track[i].lat = polyCenter.lat + (track[i].lat - polyCenter.lat) * shrinkScale;
-                    track[i].lng = polyCenter.lng + (track[i].lng - polyCenter.lng) * shrinkScale;
-                }
-                actualDist = 0;
-                for (var i = 0; i < track.length - 1; i++) {
-                    actualDist += ml_haversineDistance(track[i].lat, track[i].lng, track[i+1].lat, track[i+1].lng);
-                }
-                actualDist += ml_haversineDistance(track[track.length-1].lat, track[track.length-1].lng, track[0].lat, track[0].lng);
-            }
-
-            // 最终边界验证
-            for (var i = 0; i < track.length; i++) {
-                if (!ml_isPointInPolygon(track[i].lat, track[i].lng, polygon)) {
-                    var clamped = ml_movePointInsidePolygon(track[i].lat, track[i].lng, polygon, polyCenter);
-                    track[i].lat = clamped.lat;
-                    track[i].lng = clamped.lng;
-                }
-            }
-
-            // 重采样；如果距离低于安全下限，继续重复轨迹点补足一圈后再采样。
-            var resampled = ml_resampleTrack(track);
-            for (var i = 0; i < resampled.length; i++) {
-                if (!ml_isPointInPolygon(resampled[i].lat, resampled[i].lng, polygon)) {
-                    var adjusted = ml_movePointInsidePolygon(resampled[i].lat, resampled[i].lng, polygon, polyCenter);
-                    resampled[i].lat = adjusted.lat;
-                    resampled[i].lng = adjusted.lng;
-                }
-            }
-            var newDist = 0;
-            for (var k = 0; k < resampled.length - 1; k++) {
-                newDist += ml_haversineDistance(resampled[k].lat, resampled[k].lng, resampled[k+1].lat, resampled[k+1].lng);
-            }
-            newDist += ml_haversineDistance(resampled[resampled.length-1].lat, resampled[resampled.length-1].lng, resampled[0].lat, resampled[0].lng);
-
-            // 距离下限就是目标距离本身：numLaps 已向上取整，正常会 >= 目标；
-            // 只有当 numLaps 被 6 圈上限截断（极小场地）时才可能不足，此时重复一圈补足。
-            // 之前写死 1400，会在一圈 410m、跑 3 圈 1230m 已达标时强行翻倍成 2460m。
-            // 现在加 5% 容差：收缩后 newDist 因浮点误差会略小于目标(如 1799.9 < 1800)，
-            // 若不加容差，会被误判成"距离不足"而触发翻倍，把距离虚增到 3.6km。
-            var minSafeDistanceM = targetDistanceM;
-            var distanceRetry = 0;
-            while (newDist < minSafeDistanceM * 0.95 && distanceRetry < 3) {
-                var originalLength = track.length;
-                for (var i = 0; i < originalLength; i++) {
-                    track.push({
-                        lat: track[i].lat,
-                        lng: track[i].lng,
-                        sortNum: track.length + 1
-                    });
-                }
-                resampled = ml_resampleTrack(track);
-                for (var i = 0; i < resampled.length; i++) {
-                    if (!ml_isPointInPolygon(resampled[i].lat, resampled[i].lng, polygon)) {
-                        var adjusted = ml_movePointInsidePolygon(resampled[i].lat, resampled[i].lng, polygon, polyCenter);
-                        resampled[i].lat = adjusted.lat;
-                        resampled[i].lng = adjusted.lng;
-                    }
-                }
-                newDist = 0;
-                for (var k = 0; k < resampled.length - 1; k++) {
-                    newDist += ml_haversineDistance(resampled[k].lat, resampled[k].lng, resampled[k+1].lat, resampled[k+1].lng);
-                }
-                newDist += ml_haversineDistance(resampled[resampled.length-1].lat, resampled[resampled.length-1].lng, resampled[0].lat, resampled[0].lng);
-                distanceRetry++;
-            }
-
-            // ---- GPS 真实感后处理 ----
-            // 1) 叠加平滑 GPS 漂移。真实 GPS 误差是连续缓慢变化的，不是逐点独立
-            //    随机；逐点独立抖动会让轨迹变成锯齿。这里用随机游走：每一步在上一
-            //    步基础上做微小偏移，误差被限制在 ±3 米内，相邻点之间平滑衔接。
+            // 3) GPS 真实感：平滑随机游走漂移（±3m）。
+            //    真实 GPS 误差是连续缓慢变化的，逐点独立抖动会让轨迹变锯齿。
             var driftLat = 0, driftLng = 0;
-            var maxDrift = 0.000027;   // ±3 米
-            var driftStep = 0.000005;  // 每点最多 ±0.5 米变化
-            for (var gi = 0; gi < resampled.length; gi++) {
+            var maxDrift = 0.000027;
+            var driftStep = 0.000005;
+            for (var gi = 0; gi < track.length; gi++) {
                 driftLat += (Math.random() - 0.5) * 2 * driftStep;
                 driftLng += (Math.random() - 0.5) * 2 * driftStep;
                 driftLat = Math.max(-maxDrift, Math.min(maxDrift, driftLat));
                 driftLng = Math.max(-maxDrift, Math.min(maxDrift, driftLng));
-                resampled[gi].lat += driftLat;
-                resampled[gi].lng += driftLng;
-                // 确保漂移后仍在边界内
-                if (!ml_isPointInPolygon(resampled[gi].lat, resampled[gi].lng, polygon)) {
-                    var fixed = ml_movePointInsidePolygon(resampled[gi].lat, resampled[gi].lng, polygon, polyCenter);
-                    resampled[gi].lat = fixed.lat;
-                    resampled[gi].lng = fixed.lng;
+                track[gi].lat += driftLat;
+                track[gi].lng += driftLng;
+                // 硬约束：漂移出限制范围就收回来（跑道已经内缩，正常不会触发）
+                if (!ml_isPointInPolygon(track[gi].lat, track[gi].lng, polygon)) {
+                    var fixed = ml_shrinkPointInward(
+                        { lat: track[gi].lat, lng: track[gi].lng }, polygon, polyCenter, 0.5);
+                    track[gi].lat = fixed.lat;
+                    track[gi].lng = fixed.lng;
                 }
             }
-            // 原来这里会插入 0-2 段"短暂停顿"（连续近乎重合的点）来模拟等红灯。
-            // 校内跑操不存在红绿灯路口的等待，去掉即可：这些点既不真实，
-            // 又会让轨迹里出现零位移段，给服务端的里程计算添麻烦。
-            // 重新计算漂移后的总距离
-            newDist = 0;
-            for (var k = 0; k < resampled.length - 1; k++) {
-                newDist += ml_haversineDistance(resampled[k].lat, resampled[k].lng, resampled[k+1].lat, resampled[k+1].lng);
-            }
-            newDist += ml_haversineDistance(resampled[resampled.length-1].lat, resampled[resampled.length-1].lng, resampled[0].lat, resampled[0].lng);
 
-            // 基于实际距离和预设配速计算最终时间
-            var distanceKm = newDist / 1000;
+            // 4) 统计：总距离（开放路径）+ 离限制范围最近的距离
+            var totalDistance = 0;
+            var minClearanceM = Infinity;
+            for (var i = 0; i < track.length; i++) {
+                if (i > 0) {
+                    totalDistance += ml_haversineDistance(track[i - 1].lat, track[i - 1].lng, track[i].lat, track[i].lng);
+                }
+                var clearance = ml_isPointInPolygon(track[i].lat, track[i].lng, polygon)
+                    ? ml_distanceToPolygon(track[i].lat, track[i].lng, polygon)
+                    : -1;
+                if (clearance < minClearanceM) { minClearanceM = clearance; }
+            }
+
+            var distanceKm = totalDistance / 1000;
             var totalTime = Math.round(distanceKm * paceSecondsPerKm);
-            // 调用方按规则推导距离时不要再用写死的 241~719 夹，
-            // 否则会和时间/配速的对齐结果冲突（真正的区间由规则决定）。
             if (!options.targetDistanceM) {
                 if (totalTime < 241) totalTime = 241;
                 if (totalTime > 719) totalTime = 719;
             }
+            var paceTotalSeconds = Math.round(paceSecondsPerKm);
 
             var metadata = {
-                totalDistance: newDist,
+                totalDistance: totalDistance,
                 formattedDistance: distanceKm.toFixed(2) + " km",
                 totalTime: totalTime,
                 formattedTime: Math.floor(totalTime / 60) + " 分 " + (totalTime % 60) + " 秒",
-                paceSecondsPerKm: paceSecondsPerKm,
-                formattedPace: Math.floor(paceSecondsPerKm / 60) + "'" + Math.round(paceSecondsPerKm % 60) + "''",
+                paceSecondsPerKm: paceTotalSeconds,
+                formattedPace: Math.floor(paceTotalSeconds / 60) + "'" +
+                    String(paceTotalSeconds % 60).padStart(2, '0') + "''",
                 sampleTimeInterval: 8,
-                pointCount: resampled.length,
+                pointCount: track.length,
+                // 跑道相关：内缩了多少、单圈多长、跑了几圈、离限制范围最近几米
+                trackInsetMeters: geometry.insetMeters,
+                trackInsetIsAuto: geometry.insetIsAuto,
+                guidedByWaypoints: geometry.guided,
+                guidePointCount: geometry.guideCount,
+                targetLapMeters: geometry.targetLapMeters,
+                lapPerimeterMeters: lapPerimeter,
+                lapCount: lapCount,
+                minClearanceMeters: isFinite(minClearanceM) ? minClearanceM : 0,
                 createdAt: new Date().toISOString()
             };
-            return { track: resampled, metadata: metadata };
+            return { track: track, metadata: metadata };
         }
-
-
-        
 
         function ml_resampleTrack(points) {
             if (points.length < 3) return points;
@@ -7729,58 +8171,252 @@ function ml_distanceToPolygon(lat, lng, polygon) {
         */
         // ml_date_str 可选：批量模式传入当天的日期，单次模式留空则用日期选择器的值
         // 把生成的轨迹画到页面 SVG 上，按经纬度投影成米坐标，保持真实形状比例
+        /*
+        ML Remark: 轨迹预览
+        把「限制范围」「引导点」「生成的轨迹」画在同一张图上（同一套投影），这样才
+        能一眼看出轨迹是不是压在限制范围上、贴边还是留了余量；之前只画轨迹并把它
+        铺满画布，等于把限制范围整个裁掉，看不出两者的关系。
+        实时跑操复用同一套绘制代码，只是每帧多传一个"显示到第几个点"。
+        */
+        function ml_current_boundary_polygon() {
+            var planId = ml_choose_route_data && ml_choose_route_data.plan_id;
+            if (planId && ml_boundary_cache[planId] && ml_boundary_cache[planId].paths) {
+                return ml_boundary_cache[planId].paths;
+            }
+            return null;
+        }
+
+        function ml_track_view_for(track, boundary) {
+            var minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+            var consider = function(p) {
+                if (!p) { return; }
+                if (p.lat < minLat) { minLat = p.lat; }
+                if (p.lat > maxLat) { maxLat = p.lat; }
+                if (p.lng < minLng) { minLng = p.lng; }
+                if (p.lng > maxLng) { maxLng = p.lng; }
+            };
+            (track || []).forEach(consider);
+            (boundary || []).forEach(consider);
+            if (!isFinite(minLat) || !isFinite(minLng)) { return null; }
+            var latMeters = 111320;
+            var lngMeters = 111320 * Math.cos((minLat + maxLat) / 2 * Math.PI / 180);
+            var pad = Math.max((maxLng - minLng) * lngMeters, (maxLat - minLat) * latMeters) * 0.06 + 4;
+            return {
+                minLat: minLat, maxLat: maxLat, minLng: minLng, maxLng: maxLng,
+                latMeters: latMeters, lngMeters: lngMeters, pad: pad,
+                vbW: (maxLng - minLng) * lngMeters + 2 * pad,
+                vbH: (maxLat - minLat) * latMeters + 2 * pad
+            };
+        }
+
+        function ml_track_view_project(view, p) {
+            return {
+                x: (p.lng - view.minLng) * view.lngMeters + view.pad,
+                y: (view.maxLat - p.lat) * view.latMeters + view.pad
+            };
+        }
+
+        // 视图坐标 → 经纬度：手动引导点要把点击位置换算回经纬度
+        function ml_track_view_unproject(view, x, y) {
+            return {
+                lng: view.minLng + (x - view.pad) / view.lngMeters,
+                lat: view.maxLat - (y - view.pad) / view.latMeters
+            };
+        }
+
+        function ml_track_svg_markup(view, track, boundary, options) {
+            options = options || {};
+            var sw = Math.max(1.2, view.vbW / 160);
+            var parts = [];
+            var toPoints = function(list) {
+                return list.map(function(p) {
+                    var c = ml_track_view_project(view, p);
+                    return c.x.toFixed(1) + ',' + c.y.toFixed(1);
+                }).join(' ');
+            };
+            if (boundary && boundary.length >= 3 && options.showBoundary !== false) {
+                parts.push('<polygon points="' + toPoints(boundary) +
+                    '" fill="rgba(148,163,184,0.14)" stroke="#94a3b8" stroke-width="' + (sw * 0.8).toFixed(2) +
+                    '" stroke-dasharray="' + (sw * 3).toFixed(1) + ' ' + (sw * 2).toFixed(1) + '"></polygon>');
+            }
+            if (options.waypoints && options.waypoints.length > 0) {
+                if (options.waypoints.length > 1) {
+                    parts.push('<polyline points="' + toPoints(options.waypoints) +
+                        '" fill="none" stroke="#2563eb" stroke-width="' + (sw * 0.7).toFixed(2) +
+                        '" stroke-dasharray="' + (sw * 2).toFixed(1) + ' ' + (sw * 1.5).toFixed(1) +
+                        '" opacity="0.75"></polyline>');
+                }
+                options.waypoints.forEach(function(p, index) {
+                    var c = ml_track_view_project(view, p);
+                    parts.push('<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="' +
+                        (view.vbW / 70).toFixed(1) + '" fill="#2563eb" opacity="0.9"></circle>');
+                    parts.push('<text x="' + (c.x + view.vbW / 55).toFixed(1) + '" y="' +
+                        (c.y - view.vbW / 90).toFixed(1) + '" font-size="' + (view.vbW / 45).toFixed(1) +
+                        '" fill="#1d4ed8">' + (index + 1) + '</text>');
+                });
+            }
+            var shown = (options.revealCount === undefined || options.revealCount === null)
+                ? track.length
+                : Math.max(0, Math.min(track.length, options.revealCount));
+            if (shown >= 2) {
+                parts.push('<polyline points="' + toPoints(track.slice(0, shown)) +
+                    '" fill="none" stroke="#0f766e" stroke-width="' + sw.toFixed(2) +
+                    '" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"></polyline>');
+                var start = ml_track_view_project(view, track[0]);
+                var head = ml_track_view_project(view, track[shown - 1]);
+                parts.push('<circle cx="' + start.x.toFixed(1) + '" cy="' + start.y.toFixed(1) + '" r="' +
+                    (view.vbW / 60).toFixed(1) + '" fill="#0f766e"></circle>');
+                parts.push('<circle cx="' + head.x.toFixed(1) + '" cy="' + head.y.toFixed(1) + '" r="' +
+                    (view.vbW / 55).toFixed(1) + '" fill="#f59e0b"></circle>');
+            }
+            return parts.join('');
+        }
+
+        // ---------------- 手动引导点 ----------------
+        /*
+        ML Remark: 手动引导轨迹
+        服务端只给了"限制范围"，真实跑道在里面的哪一圈没人知道，所以允许用户直接在
+        预览图上点几个点，轨迹就按这些点走。引导点按当前场地的 planId 分开存，
+        换场地不会串台；生成时若引导点 ≥ 3 个，就用它们替代限制范围当跑道形状。
+        */
+        var ml_waypoints_by_plan = {};
+        var ml_manual_guide_enabled = false;
+        var ml_current_track_view = null;
+        var ml_current_track = null;
+        var ml_current_track_metadata = null;
+
+        function ml_active_waypoints() {
+            var planId = ml_choose_route_data && ml_choose_route_data.plan_id;
+            if (!planId) { return []; }
+            return ml_waypoints_by_plan[planId] || [];
+        }
+
+        function ml_waypoints_signature() {
+            var points = ml_active_waypoints();
+            if (points.length === 0) { return 'none'; }
+            return points.length + ':' + points.map(function(p) {
+                return p.lat.toFixed(5) + ',' + p.lng.toFixed(5);
+            }).join(';');
+        }
+
+        function ml_update_waypoint_ui() {
+            var list = document.getElementById('waypoint-list');
+            var points = ml_active_waypoints();
+            if (list) {
+                list.textContent = points.length === 0
+                    ? '还没有引导点：勾选「手动引导轨迹」后，在下面的图上依次点几个点，轨迹就按你点的路线跑。'
+                    : ('已放 ' + points.length + ' 个引导点' +
+                        (points.length < 3 ? '（至少 3 个才会用来生成轨迹）' : '，点「一键生成时间+轨迹」就按这条路线生成'));
+            }
+            var clearBtn = document.getElementById('btn-clear-waypoints');
+            if (clearBtn) { clearBtn.disabled = points.length === 0; }
+            var undoBtn = document.getElementById('btn-undo-waypoint');
+            if (undoBtn) { undoBtn.disabled = points.length === 0; }
+            ml_invalidate_batch_plans();
+        }
+
+        function ml_waypoints_changed() {
+            ml_lap_geometry_cache = {};
+            ml_update_waypoint_ui();
+            if (ml_current_track) { ml_renderTrackPreview(ml_current_track, ml_current_track_metadata); }
+        }
+
+        function ml_add_waypoint(lat, lng) {
+            var planId = ml_choose_route_data && ml_choose_route_data.plan_id;
+            if (!planId) { return; }
+            if (!ml_waypoints_by_plan[planId]) { ml_waypoints_by_plan[planId] = []; }
+            var points = ml_waypoints_by_plan[planId];
+            if (points.length >= 40) { return; }
+            points.push({ lat: lat, lng: lng });
+            ml_waypoints_changed();
+        }
+
+        function ml_undo_waypoint() {
+            var points = ml_active_waypoints();
+            if (points.length === 0) { return; }
+            points.pop();
+            ml_waypoints_changed();
+        }
+
+        function ml_clear_waypoints() {
+            var planId = ml_choose_route_data && ml_choose_route_data.plan_id;
+            if (planId) { ml_waypoints_by_plan[planId] = []; }
+            ml_waypoints_changed();
+        }
+
+        function ml_handle_track_preview_click(event) {
+            if (!ml_manual_guide_enabled || !ml_current_track_view) { return; }
+            var svg = document.getElementById('track-preview');
+            if (!svg) { return; }
+            var view = ml_current_track_view;
+            var rect = svg.getBoundingClientRect();
+            var scale = Math.min(rect.width / view.vbW, rect.height / view.vbH);
+            if (!(scale > 0)) { return; }
+            var offsetX = (rect.width - view.vbW * scale) / 2;
+            var offsetY = (rect.height - view.vbH * scale) / 2;
+            var vbX = (event.clientX - rect.left - offsetX) / scale;
+            var vbY = (event.clientY - rect.top - offsetY) / scale;
+            var ll = ml_track_view_unproject(view, vbX, vbY);
+            var polygon = ml_current_boundary_polygon();
+            if (polygon && !ml_isPointInPolygon(ll.lat, ll.lng, polygon)) {
+                ml_show_Alert('引导点超出限制范围', '请点在里面那块虚线框（限制范围）内。');
+                return;
+            }
+            ml_add_waypoint(ll.lat, ll.lng);
+        }
+
+        function ml_set_track_empty_visible(visible) {
+            var empty = document.getElementById("track-preview-empty");
+            if (empty) { empty.style.display = visible ? "flex" : "none"; }
+        }
+
         function ml_renderTrackPreview(track, metadata) {
             var wrap = document.getElementById("track-preview-wrap");
             var svg = document.getElementById("track-preview");
             if (!wrap || !svg) { return; }
             if (!track || track.length < 2) {
                 wrap.style.display = "none";
+                ml_set_track_empty_visible(true);
                 return;
             }
-            var minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-            for (var i = 0; i < track.length; i++) {
-                var p = track[i];
-                if (p.lat < minLat) minLat = p.lat;
-                if (p.lat > maxLat) maxLat = p.lat;
-                if (p.lng < minLng) minLng = p.lng;
-                if (p.lng > maxLng) maxLng = p.lng;
-            }
-            var latMeters = 111320;
-            var lngMeters = 111320 * Math.cos((minLat + maxLat) / 2 * Math.PI / 180);
-            var widthM = (maxLng - minLng) * lngMeters;
-            var heightM = (maxLat - minLat) * latMeters;
-            var pad = Math.max(widthM, heightM) * 0.06;
-            var vbW = widthM + 2 * pad;
-            var vbH = heightM + 2 * pad;
-            svg.setAttribute("viewBox", "0 0 " + vbW.toFixed(0) + " " + vbH.toFixed(0));
-
-            function px(p) {
-                return { x: (p.lng - minLng) * lngMeters + pad, y: (maxLat - p.lat) * latMeters + pad };
-            }
-            var pts = [];
-            for (var j = 0; j < track.length; j++) {
-                var c = px(track[j]);
-                pts.push(c.x.toFixed(1) + "," + c.y.toFixed(1));
-            }
-            var start = px(track[0]);
-            var end = px(track[track.length - 1]);
-            var sw = Math.max(1.2, vbW / 160);
-            svg.innerHTML =
-                '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#0f766e" stroke-width="' + sw + '" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"></polyline>' +
-                '<circle cx="' + start.x.toFixed(1) + '" cy="' + start.y.toFixed(1) + '" r="' + (vbW / 60) + '" fill="#0f766e"></circle>' +
-                '<circle cx="' + end.x.toFixed(1) + '" cy="' + end.y.toFixed(1) + '" r="' + (vbW / 60) + '" fill="#f59e0b"></circle>';
+            var boundary = ml_current_boundary_polygon();
+            var view = ml_track_view_for(track, boundary);
+            if (!view) { wrap.style.display = "none"; return; }
+            svg.setAttribute("viewBox", "0 0 " + view.vbW.toFixed(0) + " " + view.vbH.toFixed(0));
+            svg.innerHTML = ml_track_svg_markup(view, track, boundary, {
+                waypoints: ml_active_waypoints()
+            });
+            ml_current_track_view = view;
+            ml_current_track = track;
+            ml_current_track_metadata = metadata || null;
             wrap.style.display = "block";
+            ml_set_track_empty_visible(false);
 
             var metaEl = document.getElementById("track-preview-meta");
             if (metaEl && metadata) {
                 var km = (metadata.totalDistance / 1000).toFixed(2);
-                metaEl.textContent = "轨迹 " + track.length + " 点 · " + km + " km · " + (metadata.formattedTime || "");
+                var parts = ["轨迹 " + track.length + " 点", km + " km", metadata.formattedTime || ""];
+                if (metadata.lapPerimeterMeters) {
+                    parts.push("单圈 " + Math.round(metadata.lapPerimeterMeters) + "m × " + metadata.lapCount + " 圈");
+                }
+                if (metadata.trackInsetMeters) {
+                    parts.push("内缩 " + Math.round(metadata.trackInsetMeters) + "m" +
+                        (metadata.trackInsetIsAuto ? "（自动）" : ""));
+                }
+                if (metadata.minClearanceMeters !== undefined) {
+                    parts.push("离限制范围最近 " + metadata.minClearanceMeters.toFixed(1) + "m");
+                }
+                if (metadata.formattedPace) {
+                    parts.push(metadata.formattedPace + "/km" + (metadata.paceIsFixed ? "（固定）" : ""));
+                }
+                metaEl.textContent = parts.filter(Boolean).join(" · ");
             }
         }
 
         function ml_clearTrackPreview() {
             var wrap = document.getElementById("track-preview-wrap");
             if (wrap) { wrap.style.display = "none"; }
+            ml_set_track_empty_visible(true);
         }
 
         /*
@@ -7799,40 +8435,48 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             }
             var minTimeMin = Number(route.min_time) || 4;
             var maxTimeMin = Number(route.max_time) || 12;
-            var minPaceMinPerKm = Number(route.min_pace) || 3.3333;
-            var maxPaceMinPerKm = Number(route.max_pace) || 10;
             var standardKm = Number(route.route_distance_km) || 1.2;
-            if (!(minPaceMinPerKm > 0) || !(maxPaceMinPerKm > minPaceMinPerKm)) {
-                minPaceMinPerKm = 3.3333;
-                maxPaceMinPerKm = 10;
+            var bounds = ml_pace_bounds(route);
+
+            /*
+            1) 先定配速：用户选了就按用户选的（夹进可行区间），没选就在可行区间里随机。
+               选配速之后，距离不再是自由变量：时长 = 距离 × 配速必须落在规则区间内，
+               所以距离被夹进 [时长下限/配速, 时长上限/配速]，同时不低于标准里程、
+               不超过标准里程的 1.5 倍（跑太远反而不像跑操）。
+            */
+            var requestedPaceSeconds = Number(ml_options.paceSecondsPerKm);
+            var paceFromUser = isFinite(requestedPaceSeconds) && requestedPaceSeconds > 0;
+            var paceMinPerKm;
+            if (paceFromUser) {
+                paceMinPerKm = Math.min(Math.max(requestedPaceSeconds / 60, bounds.lower), bounds.upper);
+            } else {
+                paceMinPerKm = bounds.lower + Math.random() * Math.max(0, bounds.upper - bounds.lower);
             }
+            var distanceLowerKm = Math.max(standardKm, minTimeMin / paceMinPerKm);
+            var distanceUpperKm = Math.min(bounds.maxDistanceKm, maxTimeMin / paceMinPerKm);
+            if (distanceUpperKm < distanceLowerKm) { distanceUpperKm = distanceLowerKm; }
+            // 目标距离：标准里程的 1.0~1.5 倍，再夹进配速允许的区间
+            var targetDistanceKm = standardKm * (1 + Math.random() * 0.5);
+            targetDistanceKm = Math.min(Math.max(targetDistanceKm, distanceLowerKm), distanceUpperKm);
 
-            // 1) 先定目标距离（贴近标准里程，1.2~1.8 带自然零头）
-            var targetDistanceKm = standardKm + Math.random() * (standardKm * 0.5);
-
-            // 2) 生成轨迹，得到 ceil 到整圈后的实际距离
+            // 2) 生成轨迹（沿跑道按弧长取点，里程与目标误差 < 1%）
             var result = await ml_getRandomTrackForVenue(planId, {
-                targetDistanceM: targetDistanceKm * 1000
+                targetDistanceM: targetDistanceKm * 1000,
+                paceSecondsPerKm: paceMinPerKm * 60,
+                insetMeters: ml_options.insetMeters,
+                waypoints: (ml_options.waypoints !== undefined) ? ml_options.waypoints : ml_active_waypoints()
             });
             if (!result || !result.track || !result.metadata) {
                 throw new Error("轨迹生成失败");
             }
             var actualDistanceKm = result.metadata.totalDistance / 1000;
 
-            // 3) 由实际距离反推配速范围，保证时长严格落在 [minTime, maxTime] 内。
-            //    之前先随机配速再随机距离，慢配速 + 整圈距离会让时长超过 maxTime，
-            //    被夹成整 12:00（或撞出整 8:00 这类值），看起来不自然。
-            var paceLower = Math.max(minPaceMinPerKm, minTimeMin / actualDistanceKm);
-            var paceUpper = Math.min(maxPaceMinPerKm, maxTimeMin / actualDistanceKm);
-            if (paceUpper < paceLower) { paceUpper = paceLower; }
-            var paceMinPerKm = paceLower + Math.random() * (paceUpper - paceLower);
-
-            // 4) 时长 = 配速 × 实际距离（连续随机值，带零头秒数）
+            // 3) 时长 = 用户选的配速 × 实际里程（正常情况下已经在 [minTime, maxTime] 内）
             var durationSeconds = Math.round(paceMinPerKm * actualDistanceKm * 60);
             durationSeconds = Math.max(minTimeMin * 60, Math.min(maxTimeMin * 60, durationSeconds));
             durationSeconds = Math.max(durationSeconds, 60);
 
-            // 5) 时间落在该日期 + 规则的起止时间内
+            // 4) 时间落在该日期 + 规则的起止时间内
             var generatedTime = null;
             if (ml_options.fixedStartHour !== null && ml_options.fixedStartHour !== undefined) {
                 generatedTime = ml_buildFixedStartTime(ml_date_str, ml_options.fixedStartHour, durationSeconds);
@@ -7843,12 +8487,14 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                 throw new Error("该日期已经没有可用的时段了（不能提前跑）。请选择更早的日期或更早的时间。");
             }
 
-            // 6) 让轨迹 metadata 与最终提交的时长、配速一致
+            // 5) 让轨迹 metadata 与最终提交的时长、配速一致
+            var paceTotalSeconds = Math.round(paceMinPerKm * 60);
             result.metadata.totalTime = durationSeconds;
             result.metadata.formattedTime = Math.floor(durationSeconds / 60) + " 分 " + (durationSeconds % 60) + " 秒";
-            result.metadata.paceSecondsPerKm = Math.round(paceMinPerKm * 60);
-            result.metadata.formattedPace = Math.floor(paceMinPerKm) + "'" +
-                Math.round((paceMinPerKm - Math.floor(paceMinPerKm)) * 60).toString().padStart(2, '0') + "''";
+            result.metadata.paceSecondsPerKm = paceTotalSeconds;
+            result.metadata.formattedPace = Math.floor(paceTotalSeconds / 60) + "'" +
+                String(paceTotalSeconds % 60).padStart(2, '0') + "''";
+            result.metadata.paceIsFixed = paceFromUser;
 
             return {
                 date: ml_date_str,
@@ -7860,7 +8506,8 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                 start: generatedTime.start,
                 end: generatedTime.end,
                 durationSeconds: durationSeconds,
-                paceMinPerKm: paceMinPerKm
+                paceMinPerKm: paceMinPerKm,
+                paceIsFixed: paceFromUser
             };
         }
 
@@ -7932,7 +8579,10 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                     ? datePicker.value
                     : (startInput && startInput.value ? startInput.value.slice(0, 10) : ml_format_exercise_date(new Date())));
 
-            var plan = await ml_build_plan_for_date(dateStr, route, {});
+            var plan = await ml_build_plan_for_date(dateStr, route, {
+                paceSecondsPerKm: ml_pace_seconds_for_plan(),
+                insetMeters: ml_track_inset_meters
+            });
 
             document.getElementById("exercise-start_time").value = plan.start;
             document.getElementById("exercise-end_time").value = plan.end;
@@ -7970,7 +8620,12 @@ function ml_distanceToPolygon(lat, lng, polygon) {
           distance = 已跑分钟 / pace，pace 取规则区间内、且满足 distance >= standardKm 的值。
         代价：中途放弃会在服务端留下一条「进行中」的记录，接口没有删除能力。
         */
-        var ml_live_state = { running: false, startTime: null, recordId: "", startImageUrl: "", elapsed: 0, timer: null };
+        var ml_live_state = {
+            running: false, startTime: null, recordId: "", startImageUrl: "", elapsed: 0, timer: null,
+            // 开始跑操时就定好配速并把整条可能跑完的轨迹算出来，
+            // 跑的过程中按已跑距离一段段显示，提交时用的就是显示出来的那一段
+            paceMinPerKm: null, track: null, maxDistanceM: 0, view: null
+        };
 
         function ml_live_hhmmss(d) {
             return String(d.getHours()).padStart(2, '0') + ":" +
@@ -7983,7 +8638,47 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             return Math.floor(sec / 60) + " 分 " + String(sec % 60).padStart(2, '0') + " 秒";
         }
 
-        // 由真实已跑时长反推可达标的上限配速；paceMax < minPace 说明跑得还不够远
+        function ml_track_length_meters(track) {
+            var total = 0;
+            for (var i = 1; i < (track || []).length; i++) {
+                total += ml_haversineDistance(track[i - 1].lat, track[i - 1].lng, track[i].lat, track[i].lng);
+            }
+            return total;
+        }
+
+        // 取轨迹前一段（恰好覆盖 distanceM 米），用于"跑到哪画到哪"和最终提交
+        function ml_track_prefix_for_distance(track, distanceM) {
+            if (!track || track.length < 2) { return []; }
+            var out = [track[0]];
+            var total = 0;
+            for (var i = 1; i < track.length; i++) {
+                total += ml_haversineDistance(track[i - 1].lat, track[i - 1].lng, track[i].lat, track[i].lng);
+                out.push(track[i]);
+                if (total >= distanceM) { break; }
+            }
+            return out;
+        }
+
+        /*
+        ML Remark: 实时跑操的配速
+        开始跑操时就把配速定下来（用户选了就用用户选的，否则在规则区间里随机），
+        这样"跑到哪算到哪"的距离是确定的：已跑时长 / 配速。结束时沿用同一个配速，
+        所以进度条、地图上的轨迹、最终提交的里程三者是一致的。
+        */
+        function ml_live_pick_pace() {
+            var r = ml_choose_route_data || {};
+            var minPace = Number(r.min_pace) || 3.3333;
+            var maxPace = Number(r.max_pace) || 10;
+            var maxTimeMin = Number(r.max_time) || 12;
+            var stdKm = Number(r.route_distance_km) || 1.2;
+            var upper = Math.min(maxPace, maxTimeMin / stdKm);
+            var lower = Math.min(minPace, upper);
+            var chosen = Number(ml_pace_seconds_for_plan()) / 60;
+            if (!(chosen > 0)) { chosen = lower + Math.random() * Math.max(0, upper - lower); }
+            return Math.min(Math.max(chosen, lower), upper);
+        }
+
+        // 由真实已跑时长反推距离/达标情况（配速在开始时已定）
         function ml_live_metrics(elapsedSec) {
             var r = ml_choose_route_data || {};
             var minTimeSec = (Number(r.min_time) || 4) * 60;
@@ -7991,14 +8686,52 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             var minPace = Number(r.min_pace) || 3.3333;
             var maxPace = Number(r.max_pace) || 10;
             var stdKm = Number(r.route_distance_km) || 1.2;
-            var paceMax = Math.min(maxPace, (elapsedSec / 60) / stdKm);
+            var livePace = ml_live_state.paceMinPerKm;
+            // 还没开始（没定配速）时，用"已跑时长刚好撑起标准里程"的最慢配速兜底
+            var pace = livePace || Math.max(minPace, Math.min(maxPace, (elapsedSec / 60) / stdKm));
+            var distanceKm = pace > 0 ? (elapsedSec / 60) / pace : 0;
             return {
                 minTimeSec: minTimeSec, maxTimeSec: maxTimeSec,
-                minPace: minPace, maxPace: maxPace, stdKm: stdKm, paceMax: paceMax,
+                minPace: minPace, maxPace: maxPace, stdKm: stdKm,
+                pace: pace, distanceKm: distanceKm,
                 timeOk: elapsedSec >= minTimeSec && elapsedSec <= maxTimeSec,
-                distanceOk: paceMax >= minPace,
+                distanceOk: distanceKm >= stdKm,
                 overtime: elapsedSec > maxTimeSec
             };
+        }
+
+        // 实时地图：限制范围 + 已经跑过的那一段（每帧多画几个点）
+        function ml_live_renderTrack() {
+            var svg = document.getElementById("live-track-preview");
+            var track = ml_live_state.track;
+            if (!svg) { return; }
+            if (!track || track.length < 2) {
+                var wrapEmpty = document.getElementById("live-map-wrap");
+                if (wrapEmpty) { wrapEmpty.style.display = "none"; }
+                return;
+            }
+            var wrap = document.getElementById("live-map-wrap");
+            if (wrap) { wrap.style.display = "block"; }
+            var boundary = ml_current_boundary_polygon();
+            if (!ml_live_state.view) {
+                ml_live_state.view = ml_track_view_for(track, boundary);
+            }
+            var view = ml_live_state.view;
+            if (!view) { return; }
+            svg.setAttribute("viewBox", "0 0 " + view.vbW.toFixed(0) + " " + view.vbH.toFixed(0));
+            var m = ml_live_metrics(ml_live_state.elapsed);
+            var prefix = ml_track_prefix_for_distance(track, m.distanceKm * 1000);
+            svg.innerHTML = ml_track_svg_markup(view, track, boundary, {
+                revealCount: prefix.length,
+                waypoints: ml_active_waypoints()
+            });
+            var meta = document.getElementById("live-track-meta");
+            if (meta) {
+                meta.textContent = "已画 " + ml_live_fmt(ml_live_state.elapsed) + " · " +
+                    m.distanceKm.toFixed(2) + " km · " + Math.round(prefix.length) + " 个轨迹点 · 配速 " +
+                    ml_format_pace_seconds(m.pace * 60) + "/km（" +
+                    (ml_live_state.trackGuided ? "手动引导" : "按" + (ml_pace_seconds_for_plan() ? "你选的配速" : "规则区间随机")) + "）";
+            }
         }
 
         function ml_live_render() {
@@ -8015,14 +8748,18 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                 status.textContent = "⚠️ 已超过规则上限 " + Math.round(m.maxTimeSec / 60) + " 分钟，建议尽快结束。";
             } else if (m.timeOk && m.distanceOk) {
                 status.textContent = "✅ 已达到规则要求，可以点「结束跑操」。";
+            } else if (!m.distanceOk) {
+                status.textContent = "正在跑，" + m.distanceKm.toFixed(2) + " / " + m.stdKm +
+                    " km，还需约 " + ml_live_fmt(Math.max(0, m.stdKm * m.pace * 60 - elapsed)) + "。";
             } else {
                 status.textContent = "正在跑，还需 " + ml_live_fmt(m.minTimeSec - elapsed) + " 才达标。";
             }
 
             list.innerHTML = "";
             [["已跑时间", ml_live_fmt(elapsed)],
-             ["当前可记距离", ((elapsed / 60) / m.minPace).toFixed(2) + " km"],
-             ["规则要求", "不少于 " + Math.round(m.minTimeSec / 60) + " 分钟 / " + m.stdKm + " km"]
+             ["已跑距离", m.distanceKm.toFixed(2) + " km（按 " + ml_format_pace_seconds(m.pace * 60) + "/km）"],
+             ["达标要求", "不少于 " + m.stdKm + " km 且不少于 " + Math.round(m.minTimeSec / 60) + " 分钟" +
+                "（按当前配速约需 " + ml_live_fmt(m.stdKm * m.pace * 60) + "）"]
             ].forEach(function(row) {
                 var li = document.createElement("li");
                 li.textContent = row[0] + "：" + row[1];
@@ -8031,6 +8768,7 @@ function ml_distanceToPolygon(lat, lng, polygon) {
 
             var btnFinish = document.getElementById("btn-live-finish");
             if (btnFinish) { btnFinish.disabled = !((m.timeOk && m.distanceOk) || m.overtime); }
+            ml_live_renderTrack();
         }
 
         function ml_live_stop() {
@@ -8103,6 +8841,23 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                 ml_live_state.startTime = now;
                 ml_live_state.elapsed = 0;
                 ml_live_state.running = true;
+
+                // 先把配速定下来（决定"跑到哪算到哪"的距离），再把这一趟最多可能跑完的
+                // 轨迹整条算出来；跑的过程中按已跑距离一段段画出来，结束时就提交画出来的那段
+                status.textContent = "正在生成跑道轨迹…";
+                ml_live_state.paceMinPerKm = ml_live_pick_pace();
+                ml_live_state.trackGuided = ml_active_waypoints().length >= 3;
+                var liveMaxDistanceM = (ml_live_metrics(0).maxTimeSec / 60) / ml_live_state.paceMinPerKm * 1000;
+                var liveTrackResult = await ml_getRandomTrackForVenue(ml_choose_route_data.plan_id, {
+                    targetDistanceM: liveMaxDistanceM,
+                    paceSecondsPerKm: ml_live_state.paceMinPerKm * 60,
+                    insetMeters: ml_track_inset_meters,
+                    waypoints: ml_active_waypoints()
+                });
+                ml_live_state.track = liveTrackResult.track;
+                ml_live_state.maxDistanceM = liveTrackResult.metadata.totalDistance;
+                ml_live_state.view = null;
+
                 ml_live_state.timer = setInterval(function() {
                     ml_live_state.elapsed = Math.floor((Date.now() - ml_live_state.startTime.getTime()) / 1000);
                     ml_live_render();
@@ -8146,16 +8901,24 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                 status.textContent = "正在上传结束照片…";
                 var endImageUrl = await ml_upload_image(2);
 
-                // 用真实时长反推配速与距离：paceMax 保证 distance >= 标准里程
-                var elapsedMin = elapsed / 60;
-                var paceMax = Math.min(m.maxPace, elapsedMin / m.stdKm);
-                var pace = m.minPace + Math.random() * Math.max(0, paceMax - m.minPace);
-                var distanceKm = elapsedMin / pace;
-                status.textContent = "正在生成轨迹…";
-                var trackResult = await ml_getRandomTrackForVenue(ml_choose_route_data.plan_id, {
-                    targetDistanceM: distanceKm * 1000,
-                    paceSecondsPerKm: pace * 60
-                });
+                // 提交的就是进度条/地图上已经画出来的那一段：
+                // 配速在开始时已定，距离 = 已跑时长 / 配速；轨迹取前 N 个点（恰好覆盖这段距离）
+                var pace = ml_live_state.paceMinPerKm || m.pace;
+                var targetDistanceKm = Math.max(m.distanceKm, m.stdKm);
+                status.textContent = "正在整理轨迹…";
+                var liveTrack = ml_live_state.track;
+                var livePrefix = liveTrack ? ml_track_prefix_for_distance(liveTrack, targetDistanceKm * 1000) : null;
+                if (!livePrefix || livePrefix.length < 2) {
+                    // 没有预生成的轨迹（比如页面刷新过）就现场生成一条
+                    var fallback = await ml_getRandomTrackForVenue(ml_choose_route_data.plan_id, {
+                        targetDistanceM: targetDistanceKm * 1000,
+                        paceSecondsPerKm: pace * 60,
+                        insetMeters: ml_track_inset_meters,
+                        waypoints: ml_active_waypoints()
+                    });
+                    livePrefix = fallback.track;
+                }
+                var distanceKm = ml_track_length_meters(livePrefix) / 1000;
                 var paceMin = Math.floor(pace);
                 var paceSec = Math.round((pace - paceMin) * 60);
                 var payload = ml_live_record_payload({
@@ -8167,7 +8930,7 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                     "exerciseTimes": elapsed,
                     "routeKilometre": Math.round(distanceKm * 100) / 100,
                     "endImage": endImageUrl,
-                    "strLatitudeLongitude": JSON.stringify(trackResult.track),
+                    "strLatitudeLongitude": JSON.stringify(livePrefix),
                     "calorie": Math.round(distanceKm * 62),
                     "speed": paceMin + "'" + String(paceSec).padStart(2, '0') + "''",
                     "dispTimeText": ml_live_fmt(elapsed),
@@ -8175,8 +8938,12 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                 });
                 status.textContent = "正在上传结束记录…";
                 await ml_encrypted_post(ml_exercise_record_api + "/saveRecord", payload, "上传运动结束记录");
+                ml_renderTrackPreview(livePrefix, {
+                    totalDistance: distanceKm * 1000,
+                    formattedTime: ml_live_fmt(elapsed),
+                    formattedPace: ml_format_pace_seconds(pace * 60)
+                });
                 ml_live_stop();
-                ml_renderTrackPreview(trackResult.track, trackResult.metadata);
                 status.textContent = "✅ 本次跑操已提交：" + ml_live_fmt(elapsed) + " / " + distanceKm.toFixed(2) + " km";
                 ml_show_Alert("跑操完成", "✅ 已提交\n\n用时 " + ml_live_fmt(elapsed) +
                     "\n距离 " + distanceKm.toFixed(2) + " km");
@@ -8804,6 +9571,8 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             ml_all_route_info = ml_routes;
             ml_student_route_all_info = ml_tracks;
             ml_sync_route_selects(ml_preferred_plan_id, ml_keep_route_data);
+            // 场地换了，可选配速区间跟着规则走
+            if (typeof ml_update_pace_bounds_ui === "function") { ml_update_pace_bounds_ui(); }
             return ml_count;
         }
 
@@ -10266,6 +11035,147 @@ function ml_distanceToPolygon(lat, lng, polygon) {
             return Math.round((ml_simulated_delay_seconds + Math.random() * 2) * 1000);
         }
 
+        /*
+        ML Remark: 配速与跑道内缩（单次与批量共用）
+        配速交给用户自己定：滑块给的是"每公里用时"，可选项受服务端规则约束
+        （见 ml_pace_bounds）；勾「随机配速」时在规则区间里随机，批量补录时每天不会一模一样。
+        跑道内缩 0 = 自动（按 400m 单圈向内求解），也可以手工指定米数。
+        */
+        var ml_pace_random = true;
+        var ml_target_pace_seconds = 330;          // 5'30''/km
+        var ml_track_inset_meters = 0;             // 0 = 自动
+        var ml_pace_seconds_min = 200;
+        var ml_pace_seconds_max = 600;
+
+        function ml_format_pace_seconds(seconds) {
+            var s = Math.max(0, Math.round(seconds));
+            return Math.floor(s / 60) + "'" + String(s % 60).padStart(2, '0') + "''";
+        }
+
+        // 0 表示"随机配速"
+        function ml_pace_seconds_for_plan() {
+            return ml_pace_random ? 0 : Math.round(ml_target_pace_seconds);
+        }
+
+        function ml_pace_controls_sync(source) {
+            ['input-pace', 'input-pace-batch'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el) { return; }
+                el.min = String(ml_pace_seconds_min);
+                el.max = String(ml_pace_seconds_max);
+                el.step = '5';
+                if (el !== source) { el.value = String(ml_target_pace_seconds); }
+                el.disabled = ml_pace_random;
+            });
+            ['pace-random', 'pace-random-batch'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el || el === source) { return; }
+                el.checked = ml_pace_random;
+            });
+            ['pace-value-label', 'pace-value-label-batch'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el) { return; }
+                el.textContent = ml_pace_random
+                    ? '随机（' + ml_format_pace_seconds(ml_pace_seconds_min) + ' ~ ' +
+                        ml_format_pace_seconds(ml_pace_seconds_max) + '/km）'
+                    : ml_format_pace_seconds(ml_target_pace_seconds) + '/km';
+            });
+            // 「几分几秒」选择器：选项按当前可选区间生成（分钟级 + 5 秒微调）
+            ml_pace_parts_rebuild(ml_target_pace_seconds);
+            ['input-track-inset', 'input-track-inset-batch'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el || el === source) { return; }
+                el.value = String(ml_track_inset_meters);
+            });
+            ['track-inset-label', 'track-inset-label-batch'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el) { return; }
+                el.textContent = ml_track_inset_meters > 0
+                    ? ('固定内缩 ' + ml_track_inset_meters + ' m')
+                    : '自动（按 400m 单圈向内收）';
+            });
+        }
+
+        // 重建「分 / 秒」下拉：只在合法区间里给选项，避免选到规则不允许的配速
+        function ml_pace_parts_rebuild(seconds) {
+            var minSeconds = ml_pace_seconds_min;
+            var maxSeconds = ml_pace_seconds_max;
+            var value = Math.min(Math.max(Math.round(seconds), minSeconds), maxSeconds);
+            var minuteValue = Math.floor(value / 60);
+            var secondValue = value % 60;
+            var minMinute = Math.floor(minSeconds / 60);
+            var maxMinute = Math.max(minMinute, Math.ceil(maxSeconds / 60));
+
+            ['input-pace-minute', 'input-pace-minute-batch'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el) { return; }
+                var html = '';
+                for (var mm = minMinute; mm <= maxMinute; mm++) {
+                    html += '<option value="' + mm + '">' + mm + ' 分</option>';
+                }
+                el.innerHTML = html;
+                el.value = String(minuteValue);
+                el.disabled = ml_pace_random;
+            });
+
+            var lo = minuteValue === minMinute ? (minSeconds % 60) : 0;
+            var hi = minuteValue === maxMinute ? Math.min(55, maxSeconds % 60) : 55;
+            if (hi < lo) { hi = lo; }
+            ['input-pace-second', 'input-pace-second-batch'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el) { return; }
+                var html = '';
+                for (var ss = lo; ss <= hi; ss += 5) {
+                    html += '<option value="' + ss + '">' + String(ss).padStart(2, '0') + ' 秒</option>';
+                }
+                if (secondValue >= lo && secondValue <= hi && (secondValue - lo) % 5 !== 0) {
+                    html += '<option value="' + secondValue + '">' + String(secondValue).padStart(2, '0') + ' 秒</option>';
+                }
+                el.innerHTML = html;
+                el.value = String(secondValue);
+                el.disabled = ml_pace_random;
+            });
+        }
+
+        function ml_set_target_pace(seconds, source) {
+            var value = Number(seconds);
+            if (!isFinite(value) || value <= 0) { value = ml_target_pace_seconds; }
+            ml_target_pace_seconds = Math.min(Math.max(Math.round(value), ml_pace_seconds_min), ml_pace_seconds_max);
+            ml_pace_controls_sync(source);
+        }
+
+        function ml_set_pace_random(flag, source) {
+            ml_pace_random = !!flag;
+            ml_pace_controls_sync(source);
+        }
+
+        function ml_set_track_inset(meters, source) {
+            var value = Number(meters);
+            if (!isFinite(value) || value < 0) { value = 0; }
+            ml_track_inset_meters = Math.min(Math.round(value), 120);
+            ml_lap_geometry_cache = {};   // 内缩改了，缓存的跑道几何作废
+            ml_pace_controls_sync(source);
+        }
+
+        // 场地/规则变了 → 重算滑块可选范围（规则配速区间 ∩ 时长区间）
+        function ml_update_pace_bounds_ui() {
+            var bounds = ml_pace_bounds(ml_choose_route_data);
+            // 取整到 5 秒：下限四舍五入（3.3333 分/km = 3'20''，直接 floor 会掉成 3'15''）
+            var minSeconds = Math.max(120, Math.round((bounds.lower * 60) / 5) * 5);
+            var maxSeconds = Math.min(900, Math.ceil((bounds.upper * 60) / 5) * 5);
+            if (maxSeconds <= minSeconds) { maxSeconds = minSeconds + 5; }
+            ml_pace_seconds_min = minSeconds;
+            ml_pace_seconds_max = maxSeconds;
+            if (ml_target_pace_seconds < minSeconds) { ml_target_pace_seconds = minSeconds; }
+            if (ml_target_pace_seconds > maxSeconds) { ml_target_pace_seconds = maxSeconds; }
+            var hint = document.getElementById('pace-hint');
+            if (hint) {
+                hint.textContent = '当前场地可选 ' + ml_format_pace_seconds(minSeconds) + ' ~ ' +
+                    ml_format_pace_seconds(maxSeconds) + '/km（服务端规则配速区间与时长区间取交集）';
+            }
+            ml_pace_controls_sync();
+        }
+
         function ml_set_run_submit_status(message, state) {
             var status = document.getElementById('run-submit-status');
             if (!status) return;
@@ -10451,6 +11361,9 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                     ? 'random-venue'
                     : ('venue:' + document.getElementById('select-route_info-batch').value),
                 document.getElementById('batch-random-time').checked ? 'random-time' : 'fixed-07',
+                'pace:' + (ml_pace_random ? 'random' : ml_target_pace_seconds),
+                'inset:' + ml_track_inset_meters,
+                'guide:' + ml_waypoints_signature(),
                 ml_batch_photo_signature(startPoolInput ? startPoolInput.files : []),
                 ml_batch_photo_signature(endPoolInput ? endPoolInput.files : [])
             ].join('||');
@@ -10538,7 +11451,9 @@ function ml_distanceToPolygon(lat, lng, polygon) {
 
                     var plan = await ml_build_plan_for_date(currentDate, route, {
                         now: nowGuard,
-                        fixedStartHour: randomTime ? null : 7
+                        fixedStartHour: randomTime ? null : 7,
+                        paceSecondsPerKm: ml_pace_seconds_for_plan(),
+                        insetMeters: ml_track_inset_meters
                     });
                     var timeError = ml_check_plan_time(plan, nowGuard);
                     if (timeError) {
@@ -11403,9 +12318,72 @@ function ml_distanceToPolygon(lat, lng, polygon) {
                     ml_student_choose_route_data = ml_student_route_all_info[selectedPlanId];
                     ml_generated_track = null;  // 用户换了场地，之前那份生成结果不再适用
                     ml_clearTrackPreview();  // 换了场地，旧轨迹预览作废
+                    // 场地换了：配速可选区间和引导点都跟着这个场地走
+                    if (typeof ml_update_pace_bounds_ui === 'function') { ml_update_pace_bounds_ui(); }
+                    if (typeof ml_update_waypoint_ui === 'function') { ml_update_waypoint_ui(); }
                     console.log("选择的路线的详细信息:\n", ml_choose_route_data, "\n", ml_student_choose_route_data);
 
                 });
+            })();
+
+            // 配速 / 跑道内缩 / 手动引导：单次与批量共用同一份状态
+            ['input-pace', 'input-pace-batch'].forEach(function(id) {
+                var field = document.getElementById(id);
+                if (!field) { return; }
+                field.addEventListener('input', function() { ml_set_target_pace(this.value, this); });
+                field.addEventListener('change', function() { ml_set_target_pace(this.value, this); });
+            });
+            ['input-pace-minute', 'input-pace-minute-batch'].forEach(function(id) {
+                var field = document.getElementById(id);
+                if (!field) { return; }
+                field.addEventListener('change', function() {
+                    var isBatch = id.indexOf('batch') >= 0;
+                    var secondEl = document.getElementById(isBatch ? 'input-pace-second-batch' : 'input-pace-second');
+                    ml_set_target_pace(Number(this.value) * 60 + Number(secondEl ? secondEl.value : 0), null);
+                });
+            });
+            ['input-pace-second', 'input-pace-second-batch'].forEach(function(id) {
+                var field = document.getElementById(id);
+                if (!field) { return; }
+                field.addEventListener('change', function() {
+                    var isBatch = id.indexOf('batch') >= 0;
+                    var minuteEl = document.getElementById(isBatch ? 'input-pace-minute-batch' : 'input-pace-minute');
+                    ml_set_target_pace(Number(minuteEl ? minuteEl.value : 0) * 60 + Number(this.value), null);
+                });
+            });
+            ['pace-random', 'pace-random-batch'].forEach(function(id) {
+                var field = document.getElementById(id);
+                if (!field) { return; }
+                field.addEventListener('change', function() { ml_set_pace_random(this.checked, this); });
+            });
+            ['input-track-inset', 'input-track-inset-batch'].forEach(function(id) {
+                var field = document.getElementById(id);
+                if (!field) { return; }
+                field.addEventListener('input', function() { ml_set_track_inset(this.value, this); });
+                field.addEventListener('change', function() { ml_set_track_inset(this.value, this); });
+            });
+            (function initPaceAndGuide() {
+                ml_update_pace_bounds_ui();
+                ml_update_waypoint_ui();
+                var guideToggle = document.getElementById('manual-guide');
+                if (guideToggle) {
+                    guideToggle.addEventListener('change', function() {
+                        ml_manual_guide_enabled = this.checked;
+                        var svg = document.getElementById('track-preview');
+                        if (svg) { svg.classList.toggle('is-guiding', ml_manual_guide_enabled); }
+                        if (ml_manual_guide_enabled) {
+                            ml_show_Alert('手动引导轨迹',
+                                '在下面的轨迹图上依次点几个点（至少 3 个），轨迹就按你点的路线走。\n\n' +
+                                '建议：沿着你真正要跑的那一圈点，点完再点「一键生成时间+轨迹」。');
+                        }
+                    });
+                }
+                var undoBtn = document.getElementById('btn-undo-waypoint');
+                if (undoBtn) { undoBtn.addEventListener('click', ml_undo_waypoint); }
+                var clearBtn = document.getElementById('btn-clear-waypoints');
+                if (clearBtn) { clearBtn.addEventListener('click', ml_clear_waypoints); }
+                var previewSvg = document.getElementById('track-preview');
+                if (previewSvg) { previewSvg.addEventListener('click', ml_handle_track_preview_click); }
             })();
 
             // 一键生成时间 + 轨迹（两者必须自洽：duration = distance × pace）

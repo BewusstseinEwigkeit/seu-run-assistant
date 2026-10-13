@@ -1,0 +1,106 @@
+========================================================
+【已完成】生成结果与最终落位（v1 资产已接入页面）
+
+GPT 生成的设计图（入库的是压缩版；原始 PNG 在本地，不入 git）：
+D:\Vibe Coding\seu-run-assistant\design\generated\01-visual-reference.webp
+D:\Vibe Coding\seu-run-assistant\design\generated\02-site-mockup-desktop.webp
+D:\Vibe Coding\seu-run-assistant\design\generated\02-site-mockup-mobile.webp
+D:\Vibe Coding\seu-run-assistant\design\generated\01-visual-reference.png        （原始，本地）
+D:\Vibe Coding\seu-run-assistant\design\generated\02-site-mockup-desktop.png    （原始，本地）
+D:\Vibe Coding\seu-run-assistant\design\generated\02-site-mockup-mobile.png     （原始，本地）
+D:\Vibe Coding\seu-run-assistant\design\generated\_contact-sheet.png            （验收总览图）
+
+资产母版（q95 全分辨率，换尺寸/质量都从这份转）：
+D:\Vibe Coding\seu-run-assistant\design\generated\originals\*.webp              （入库）
+D:\Vibe Coding\seu-run-assistant\design\generated\originals\*.png               （原始，本地）
+
+已转码并接进页面的资产（index.html 正在用这些）：
+D:\Vibe Coding\seu-run-assistant\assets\hero-backdrop.webp      首屏背景
+D:\Vibe Coding\seu-run-assistant\assets\banner-form.webp        照片/提交面板横幅
+D:\Vibe Coding\seu-run-assistant\assets\banner-batch.webp       批量面板横幅
+D:\Vibe Coding\seu-run-assistant\assets\banner-live.webp        实时跑操面板横幅
+D:\Vibe Coding\seu-run-assistant\assets\empty-track.webp        轨迹预览空状态
+D:\Vibe Coding\seu-run-assistant\assets\texture-paper.webp      纸张颗粒
+D:\Vibe Coding\seu-run-assistant\assets\og-cover.jpg            封面（og:image）
+
+图标：未使用生成图，改为 index.html 内联 SVG 精灵
+（#i-key #i-pin #i-clock #i-stopwatch #i-gauge #i-camera #i-checklist #i-calendar）
+
+参考截图 design\refs\ 不入 git（一条命令可重拍）：
+  node design\capture-refs.js
+
+已清理：assets\ 下 7 张重复 PNG、light-campus-track-v1.webp、light-photo-workflow-v1.webp
+
+========================================================
+以下是生图前的原始说明（保留备查）
+
+第 1 步 · 出「视觉参考图（风格情绪板）」
+提示词文件（把里面的"给 GPT 的上下文 + 中文提示词"发过去）：
+D:\Vibe Coding\seu-run-assistant\design\prompts\01-visual-reference.md
+
+同时附上这两张图：
+D:\Vibe Coding\seu-run-assistant\design\palette.png
+D:\Vibe Coding\seu-run-assistant\design\refs\01-form-panel.png
+
+--------------------------------------------------------
+第 2 步 · 出「整站视觉样式参考图」（桌面 + 手机）
+提示词文件：
+D:\Vibe Coding\seu-run-assistant\design\prompts\02-site-mockup.md
+
+同时附上这五张图：
+D:\Vibe Coding\seu-run-assistant\design\refs\00-first-screen.png
+D:\Vibe Coding\seu-run-assistant\design\refs\01-form-panel.png
+D:\Vibe Coding\seu-run-assistant\design\refs\03-batch-panel.png
+D:\Vibe Coding\seu-run-assistant\design\refs\04-live-panel.png
+D:\Vibe Coding\seu-run-assistant\design\refs\06-mobile-form.png
+
+--------------------------------------------------------
+第 3 步 · 出「真正要用的图片」（逐张生成）
+提示词文件：
+D:\Vibe Coding\seu-run-assistant\design\prompts\03-assets.md
+
+建议附上（当风格锚点，跟第 1 步生成的结果一起发）：
+D:\Vibe Coding\seu-run-assistant\design\palette.png
+D:\Vibe Coding\seu-run-assistant\design\refs\09-form-panel-guided.png
+D:\Vibe Coding\seu-run-assistant\design\refs\08-track-preview.png
+
+--------------------------------------------------------
+参考截图全量（哪张要用就直接拿）
+D:\Vibe Coding\seu-run-assistant\design\refs\00-first-screen.png
+D:\Vibe Coding\seu-run-assistant\design\refs\01-form-panel.png
+D:\Vibe Coding\seu-run-assistant\design\refs\02-photo-review.png
+D:\Vibe Coding\seu-run-assistant\design\refs\03-batch-panel.png
+D:\Vibe Coding\seu-run-assistant\design\refs\04-live-panel.png
+D:\Vibe Coding\seu-run-assistant\design\refs\05-guide.png
+D:\Vibe Coding\seu-run-assistant\design\refs\06-mobile-form.png
+D:\Vibe Coding\seu-run-assistant\design\refs\07-mobile-batch.png
+D:\Vibe Coding\seu-run-assistant\design\refs\08-track-preview.png
+D:\Vibe Coding\seu-run-assistant\design\refs\09-form-panel-guided.png
+
+--------------------------------------------------------
+本地样本 / 占位资产（现在就能接进页面，GPT 出图后同名替换）
+D:\Vibe Coding\seu-run-assistant\design\samples\hero-backdrop.png
+D:\Vibe Coding\seu-run-assistant\design\samples\banner-form.png
+D:\Vibe Coding\seu-run-assistant\design\samples\banner-batch.png
+D:\Vibe Coding\seu-run-assistant\design\samples\banner-live.png
+D:\Vibe Coding\seu-run-assistant\design\samples\empty-track.png
+D:\Vibe Coding\seu-run-assistant\design\samples\texture-paper.png
+D:\Vibe Coding\seu-run-assistant\design\samples\og-cover.png
+
+--------------------------------------------------------
+生成好的图放这里（我在代码里接）
+首屏背景      →  D:\Vibe Coding\seu-run-assistant\assets\hero-backdrop.webp
+表单横幅      →  D:\Vibe Coding\seu-run-assistant\assets\banner-form.webp
+批量横幅      →  D:\Vibe Coding\seu-run-assistant\assets\banner-batch.webp
+实时横幅      →  D:\Vibe Coding\seu-run-assistant\assets\banner-live.webp
+空状态        →  D:\Vibe Coding\seu-run-assistant\assets\empty-track.webp
+纸张颗粒      →  D:\Vibe Coding\seu-run-assistant\assets\texture-paper.png
+封面图        →  D:\Vibe Coding\seu-run-assistant\assets\og-cover.png
+图标（一套）  →  D:\Vibe Coding\seu-run-assistant\assets\icons\
+
+--------------------------------------------------------
+辅助脚本（改了界面/配色后重跑）
+重拍参考截图 + 验证功能：
+  node design\capture-refs.js
+重生成色卡与样本图：
+  python design\make-samples.py
